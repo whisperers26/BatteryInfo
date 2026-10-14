@@ -627,19 +627,51 @@ public class RazerBatteryProviderTests
     }
 
     [Fact]
-    public async Task Default_wait_wakes_up_when_the_poll_is_cancelled()
+    public async Task Cancelling_a_busy_poll_stops_it_promptly()
     {
-        // A mailbox that stays busy would keep the poll going for about 1.3 s per command.
+        // A mailbox that stays busy would keep the poll going for about 1.2 s. The test cancels right after the
+        // first request goes out, from its own thread: a timer-based cancel runs on the thread pool, which the
+        // parallel tests can starve until the whole busy poll has finished.
         var mouse = Wired();
         mouse.ScriptEvery(0x84, 3, Replies.Busy);
+        using var firstSend = new ManualResetEventSlim();
+        var setFeature = mouse.Device.OnSetFeature!;
+        mouse.Device.OnSetFeature = frame =>
+        {
+            setFeature(frame);
+            firstSend.Set();
+        };
         var provider = new RazerBatteryProvider(_backend, _time);
-        using var cts = new CancellationTokenSource(TimeSpan.FromMilliseconds(50));
+        using var cts = new CancellationTokenSource();
+        var poll = Task.Factory.StartNew(() => provider.PollAsync(cts.Token), CancellationToken.None,
+            TaskCreationOptions.LongRunning, TaskScheduler.Default).Unwrap();
+
+        Assert.True(firstSend.Wait(TimeSpan.FromSeconds(5)), "the poll never sent a request");
+        var clock = System.Diagnostics.Stopwatch.StartNew();
+        cts.Cancel();
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => poll);
+        Assert.True(clock.Elapsed < TimeSpan.FromMilliseconds(800), $"took {clock.Elapsed.TotalMilliseconds} ms after the cancel");
+        Assert.Equal(0, _backend.OpenConnections);
+    }
+
+    [Fact]
+    public void Default_wait_wakes_up_when_cancelled()
+    {
+        var provider = new RazerBatteryProvider(_backend, _time);
+        using var cts = new CancellationTokenSource();
+        var canceller = new Thread(() =>
+        {
+            Thread.Sleep(50);
+            cts.Cancel();
+        });
         var clock = System.Diagnostics.Stopwatch.StartNew();
 
-        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => Task.Run(() => provider.PollAsync(cts.Token)));
+        canceller.Start();
+        provider.Wait(TimeSpan.FromSeconds(10), cts.Token);
 
-        Assert.True(clock.Elapsed < TimeSpan.FromMilliseconds(800), $"took {clock.Elapsed.TotalMilliseconds} ms");
-        Assert.Equal(0, _backend.OpenConnections);
+        Assert.True(clock.Elapsed < TimeSpan.FromSeconds(5), $"waited {clock.Elapsed.TotalMilliseconds} ms");
+        canceller.Join();
     }
 
     [Fact]
