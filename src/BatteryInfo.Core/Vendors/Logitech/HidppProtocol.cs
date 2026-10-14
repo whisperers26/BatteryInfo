@@ -44,6 +44,29 @@ public readonly record struct HidppPairingInfo(ushort Wpid, byte Kind);
 /// <summary>DEVICE_FW_INFO (0x0003) getDeviceInfo.</summary>
 public readonly record struct HidppDeviceIds(uint UnitId, ushort? Wpid, ushort? UsbPid);
 
+/// <summary>A decoded battery value. <see cref="Approximate"/> is set when the percent is derived from a voltage or a
+/// coarse level rather than reported by the device.</summary>
+public readonly record struct HidppBattery(int? Percent, ChargeState Charge, bool Approximate);
+
+[Flags]
+public enum UnifiedBatteryLevel : byte
+{
+    None = 0,
+    Critical = 0x01,
+    Low = 0x02,
+    Good = 0x04,
+    Full = 0x08,
+}
+
+/// <summary>0x1004 getCapabilities: r0 = supported levels, r1 = flags (bit1: state of charge supported).</summary>
+public readonly record struct UnifiedBatteryCapabilities(byte SupportedLevels, byte Flags)
+{
+    public bool HasStateOfCharge => (Flags & 0x02) != 0;
+}
+
+/// <summary>0x1004 getStatus: r0 = state of charge, r1 = level, r2 = charging status.</summary>
+public readonly record struct UnifiedBatteryStatus(int StateOfCharge, UnifiedBatteryLevel Level, byte ChargingStatus);
+
 /// <summary>Builds and parses HID++ 1.0 and 2.0 frames (docs/protocols/logitech.md). Pure: no I/O.</summary>
 public static class HidppProtocol
 {
@@ -228,6 +251,158 @@ public static class HidppProtocol
         wirelessStatusIndex != 0
         && TryParseFeatureEvent(report, out _, out var featureIndex, out var eventNumber)
         && featureIndex == wirelessStatusIndex && eventNumber == 0 && report[4] == 0x01;
+
+    // Battery features (§7). Every decoder takes the whole reply report; r0 is byte 4.
+
+    public static UnifiedBatteryCapabilities ParseUnifiedCapabilities(ReadOnlySpan<byte> reply) => new(reply[4], reply[5]);
+
+    public static UnifiedBatteryStatus ParseUnifiedStatus(ReadOnlySpan<byte> reply) =>
+        new(reply[4], (UnifiedBatteryLevel)reply[5], reply[6]);
+
+    /// <summary>0x1004 charging status r2: 1, 2, 5 charging; 3 full; 4 error; 0 discharging; others invalid.</summary>
+    public static ChargeState UnifiedCharge(byte status) => status switch
+    {
+        0 => ChargeState.Discharging,
+        1 or 2 or 5 => ChargeState.Charging,
+        3 => ChargeState.Full,
+        4 => ChargeState.Fault,
+        _ => ChargeState.Unknown,
+    };
+
+    /// <summary>0x1004 getStatus. Uses the state of charge when the device supports it, otherwise approximates the
+    /// percent from the level. Without capabilities, a state of charge of 1-100 is trusted.</summary>
+    public static HidppBattery DecodeUnifiedBattery(ReadOnlySpan<byte> reply, UnifiedBatteryCapabilities? capabilities)
+    {
+        var status = ParseUnifiedStatus(reply);
+        var charge = UnifiedCharge(status.ChargingStatus);
+        var useStateOfCharge = capabilities is { } caps ? caps.HasStateOfCharge : status.StateOfCharge is > 0 and <= 100;
+        if (useStateOfCharge && status.StateOfCharge <= 100) return new HidppBattery(status.StateOfCharge, charge, false);
+
+        var levels = status.Level & (UnifiedBatteryLevel)(capabilities?.SupportedLevels ?? 0x0F);
+        return new HidppBattery(LevelPercent(levels), charge, true);
+    }
+
+    /// <summary>0x1000 getBatteryLevelStatus: r0 = level % (0 unknown), r2 = status.</summary>
+    public static HidppBattery DecodeBatteryStatus(ReadOnlySpan<byte> reply)
+    {
+        var status = reply[6];
+        var charge = status switch
+        {
+            0 => ChargeState.Discharging,
+            1 or 2 or 4 => ChargeState.Charging,
+            3 => ChargeState.Full,
+            5 or 6 or 7 => ChargeState.Fault,
+            _ => ChargeState.Unknown,
+        };
+        int? percent = status == 3 ? 100 : reply[4] is > 0 and <= 100 ? reply[4] : null;
+        return new HidppBattery(percent, charge, false);
+    }
+
+    /// <summary>0x1001 getBatteryInfo: r0..r1 = millivolts, r2 = flags (bit7 external power, then low 3 bits:
+    /// 0 charging, 1 full, 2 not charging).</summary>
+    public static HidppBattery DecodeBatteryVoltage(ReadOnlySpan<byte> reply)
+    {
+        var flags = reply[6];
+        var charge = (flags & 0x80) == 0
+            ? ChargeState.Discharging
+            : (flags & 0x07) switch
+            {
+                0 => ChargeState.Charging,
+                1 => ChargeState.Full,
+                2 => ChargeState.NotCharging,
+                _ => ChargeState.Unknown,
+            };
+        return new HidppBattery(VoltageToPercent(Millivolts(reply)), charge, true);
+    }
+
+    /// <summary>0x1F20 fn0: r0..r1 = millivolts, r2 = flags. Null when flags bit0 is clear (device inactive).</summary>
+    public static HidppBattery? DecodeAdcMeasurement(ReadOnlySpan<byte> reply)
+    {
+        var flags = reply[6];
+        if ((flags & 0x01) == 0) return null;
+        var charge = flags switch
+        {
+            0x01 => ChargeState.Discharging,
+            0x03 => ChargeState.Charging,
+            0x07 => ChargeState.Full,
+            _ => ChargeState.Unknown,
+        };
+        return new HidppBattery(AdcVoltageToPercent(Millivolts(reply)), charge, true);
+    }
+
+    /// <summary>HID++ 1.0 register 0x0D: r0 = %, r2 &amp; 0xF0 = 0x30 discharging, 0x50 charging, 0x90 full.</summary>
+    public static HidppBattery DecodeRegisterBatteryCharge(ReadOnlySpan<byte> reply)
+    {
+        var charge = (reply[6] & 0xF0) switch
+        {
+            0x30 => ChargeState.Discharging,
+            0x50 => ChargeState.Charging,
+            0x90 => ChargeState.Full,
+            _ => ChargeState.Unknown,
+        };
+        return new HidppBattery(reply[4] <= 100 ? reply[4] : null, charge, false);
+    }
+
+    /// <summary>HID++ 1.0 register 0x07: r0 = level (7 full, 5 good, 3 low, 1 critical), r1 = charging bits.</summary>
+    public static HidppBattery DecodeRegisterBatteryStatus(ReadOnlySpan<byte> reply)
+    {
+        int? percent = reply[4] switch
+        {
+            7 => 90,
+            5 => 50,
+            3 => 20,
+            1 => 5,
+            _ => null,
+        };
+        var charging = reply[5];
+        var charge = charging == 0 ? ChargeState.Discharging
+            : (charging & 0x21) == 0x21 ? ChargeState.Charging
+            : (charging & 0x22) == 0x22 ? ChargeState.Full
+            : ChargeState.Unknown;
+        return new HidppBattery(percent, charge, true);
+    }
+
+    /// <summary>Linux kernel 0x1001 voltage curve: the first entry at or below the voltage gives 100 - index.</summary>
+    public static int VoltageToPercent(int millivolts) => Lookup(VoltageTable, millivolts);
+
+    /// <summary>Linux kernel 0x1F20 voltage curve.</summary>
+    public static int AdcVoltageToPercent(int millivolts) => Lookup(AdcVoltageTable, millivolts);
+
+    private static int? LevelPercent(UnifiedBatteryLevel levels) =>
+        levels.HasFlag(UnifiedBatteryLevel.Full) ? 90
+        : levels.HasFlag(UnifiedBatteryLevel.Good) ? 50
+        : levels.HasFlag(UnifiedBatteryLevel.Low) ? 20
+        : levels.HasFlag(UnifiedBatteryLevel.Critical) ? 5
+        : null;
+
+    private static int Millivolts(ReadOnlySpan<byte> reply) => reply[4] << 8 | reply[5];
+
+    private static int Lookup(ReadOnlySpan<int> table, int millivolts)
+    {
+        for (var i = 0; i < table.Length; i++)
+        {
+            if (millivolts >= table[i]) return 100 - i;
+        }
+        return 0;
+    }
+
+    private static ReadOnlySpan<int> VoltageTable =>
+    [
+        4186, 4156, 4143, 4133, 4122, 4113, 4103, 4094, 4086, 4075, 4067, 4059, 4051, 4043, 4035, 4027, 4019, 4011, 4003, 3997,
+        3989, 3983, 3976, 3969, 3961, 3955, 3949, 3942, 3935, 3929, 3922, 3916, 3909, 3902, 3896, 3890, 3883, 3877, 3870, 3865,
+        3859, 3853, 3848, 3842, 3837, 3833, 3828, 3824, 3819, 3815, 3811, 3808, 3804, 3800, 3797, 3793, 3790, 3787, 3784, 3781,
+        3778, 3775, 3772, 3770, 3767, 3764, 3762, 3759, 3757, 3754, 3751, 3748, 3744, 3741, 3737, 3734, 3730, 3726, 3724, 3720,
+        3717, 3714, 3710, 3706, 3702, 3697, 3693, 3688, 3683, 3677, 3671, 3666, 3662, 3658, 3654, 3646, 3633, 3612, 3579, 3537,
+    ];
+
+    private static ReadOnlySpan<int> AdcVoltageTable =>
+    [
+        4030, 4024, 4018, 4011, 4003, 3994, 3985, 3975, 3963, 3951, 3937, 3922, 3907, 3893, 3880, 3868, 3857, 3846, 3837, 3828,
+        3820, 3812, 3805, 3798, 3791, 3785, 3779, 3773, 3768, 3762, 3757, 3752, 3747, 3742, 3738, 3733, 3729, 3724, 3720, 3716,
+        3712, 3708, 3704, 3700, 3696, 3692, 3688, 3685, 3681, 3677, 3674, 3670, 3667, 3663, 3660, 3657, 3653, 3650, 3646, 3643,
+        3640, 3637, 3633, 3630, 3627, 3624, 3620, 3617, 3614, 3611, 3608, 3604, 3601, 3598, 3595, 3592, 3589, 3585, 3582, 3579,
+        3576, 3573, 3569, 3566, 3563, 3560, 3556, 3553, 3550, 3546, 3543, 3539, 3536, 3532, 3529, 3525, 3499, 3466, 3433, 3399,
+    ];
 
     private static bool IsPing(ReadOnlySpan<byte> request) => request[2] == 0x00 && request[3] >> 4 == 1;
 
