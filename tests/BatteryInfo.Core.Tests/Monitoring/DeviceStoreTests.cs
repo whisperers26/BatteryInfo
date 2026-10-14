@@ -73,6 +73,18 @@ public class DeviceStoreTests
     }
 
     [Fact]
+    public void Device_that_never_had_a_value_is_dropped_when_missing_from_its_vendor_poll()
+    {
+        // A receiver's error row, reported only while the receiver fails, has nothing to show once it is gone.
+        _store.Apply("ROG", [Reading("rog:omni-receiver:T4", "ROG", null, DeviceStatus.Error), Reading("rog:azoth-x:T4", "ROG", 45)]);
+
+        _store.Apply("ROG", [Reading("rog:azoth-x:T4", "ROG", 45)]);
+
+        var state = Assert.Single(_store.Snapshot());
+        Assert.Equal("rog:azoth-x:T4", state.Latest.DeviceId);
+    }
+
+    [Fact]
     public void Apply_leaves_other_vendors_untouched()
     {
         _store.Apply("Betop", [Reading("betop:KP70C2", "Betop", 91)]);
