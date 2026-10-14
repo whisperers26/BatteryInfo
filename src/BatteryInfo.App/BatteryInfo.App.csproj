@@ -9,6 +9,8 @@
     <!-- Program.Main starts Velopack before WPF, so App.xaml is a plain page, not the generated entry point. -->
     <StartupObject>BatteryInfo.App.Program</StartupObject>
     <Version>0.0.0</Version>
+    <!-- The exe's own icon: Start menu and desktop shortcuts, Settings > Apps and the installer show it. -->
+    <ApplicationIcon>BatteryInfo.ico</ApplicationIcon>
     <!-- WPF0001: ThemeMode (Fluent) is marked experimental. -->
     <NoWarn>$(NoWarn);WPF0001</NoWarn>
   </PropertyGroup>
@@ -22,6 +24,11 @@
   <ItemGroup>
     <ApplicationDefinition Remove="App.xaml" />
     <Page Include="App.xaml" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- Next to the exe as well: ShortcutIcons points the installer's shortcuts at it. -->
+    <None Include="BatteryInfo.ico" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 
   <ItemGroup>

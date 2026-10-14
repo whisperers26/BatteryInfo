@@ -5,6 +5,8 @@ namespace BatteryInfo.App.Interop;
 internal static partial class NativeMethods
 {
     public const int SmCxSmIcon = 49;
+    public const int ShcneAssocChanged = 0x08000000;
+    public const uint ShcnfIdList = 0x0000;
 
     [DllImport("user32.dll", SetLastError = true)]
     [return: MarshalAs(UnmanagedType.Bool)]
@@ -21,4 +23,7 @@ internal static partial class NativeMethods
 
     [DllImport("user32.dll")]
     public static extern IntPtr MonitorFromWindow(IntPtr hwnd, uint flags);
+
+    [DllImport("shell32.dll")]
+    public static extern void SHChangeNotify(int eventId, uint flags, IntPtr item1, IntPtr item2);
 }

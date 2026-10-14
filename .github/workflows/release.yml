@@ -53,6 +53,7 @@ jobs:
         run: >
           vpk pack --packId BatteryInfoApp --packVersion ${{ steps.version.outputs.version }}
           --packDir publish --mainExe BatteryInfo.exe --packTitle BatteryInfo --packAuthors whisperers26
+          --icon src/BatteryInfo.App/BatteryInfo.ico
           --runtime win-x64 --framework net10.0-x64-desktop -o releases
 
       - name: Upload to GitHub release
