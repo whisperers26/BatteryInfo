@@ -299,11 +299,18 @@
                     </Grid.ColumnDefinitions>
                     <TextBlock Text="{Binding UpdatedText}" FontSize="12" VerticalAlignment="Center"
                                Foreground="{DynamicResource TextFillColorSecondaryBrush}" />
-                    <Button Grid.Column="1" Style="{StaticResource IconButtonStyle}" Command="{Binding RefreshCommand}"
-                            ToolTip="Refresh now" AutomationProperties.Name="Refresh now">
-                        <TextBlock Text="&#xE72C;" FontFamily="{StaticResource IconFont}" FontSize="14" />
-                    </Button>
+                    <StackPanel Grid.Column="1" Orientation="Horizontal">
+                        <Button Style="{StaticResource IconButtonStyle}" Command="{Binding RefreshCommand}"
+                                ToolTip="Refresh now" AutomationProperties.Name="Refresh now">
+                            <TextBlock Text="&#xE72C;" FontFamily="{StaticResource IconFont}" FontSize="14" />
+                        </Button>
+                        <Button Style="{StaticResource IconButtonStyle}" Command="{Binding ToggleSettingsCommand}"
+                                ToolTip="Settings" AutomationProperties.Name="Settings">
+                            <TextBlock Text="&#xE713;" FontFamily="{StaticResource IconFont}" FontSize="14" />
+                        </Button>
+                    </StackPanel>
                 </Grid>
+                <StackPanel Visibility="{Binding SettingsExpanded, Converter={StaticResource BoolToVisibility}}">
                 <Grid MinHeight="36" Margin="0,0,6,0">
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="*" />
@@ -357,6 +364,7 @@
                     <Button Grid.Column="1" Content="{Binding UpdateActionText}" Command="{Binding UpdateCommand}"
                             Padding="10,4" VerticalAlignment="Center" AutomationProperties.Name="{Binding UpdateActionText}" />
                 </Grid>
+                </StackPanel>
             </StackPanel>
         </Border>
     </Grid>
