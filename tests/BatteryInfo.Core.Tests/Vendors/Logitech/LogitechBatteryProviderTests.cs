@@ -419,6 +419,102 @@ public class LogitechBatteryProviderTests
         Assert.Equal([BatteryComponent.Single(20, ChargeState.Charging)], keyboard.Components);
     }
 
+    // Feature-index confirmation. A getFeature reply does not name the feature it answers: only the device index, index
+    // 0, fn0 and the software id tie it to a request. Another program on the receiver that happens to use software id
+    // 0x0C (logi_lamparray_service picks its own at runtime) can put its reply in front of ours.
+
+    // §11: the read functions this app may call, by feature id.
+    private static readonly Dictionary<ushort, int[]> ReadFunctions = new()
+    {
+        [0x0001] = [0, 1], [0x0003] = [0, 1], [0x0005] = [0, 1, 2], [0x0007] = [0, 1],
+        [0x1000] = [0, 1], [0x1001] = [0], [0x1004] = [0, 1], [0x1F20] = [0],
+    };
+
+    private void AssertEveryFeatureCallIsAReadOfTheFeatureReallyAtThatIndex(FakeHidppDevice device)
+    {
+        foreach (var frame in _receiver.Requests.Where(f => f[1] == 0x01 && f[2] is > 0x00 and < 0x80))
+        {
+            var feature = device.Features.Where(f => f.Value == frame[2]).Select(f => (ushort?)f.Key).FirstOrDefault();
+            Assert.True(feature is { } id && ReadFunctions.GetValueOrDefault(id, []).Contains(frame[3] >> 4),
+                $"{Convert.ToHexString(frame)} calls fn{frame[3] >> 4} of feature {feature:X4} at index {frame[2]:X2}");
+        }
+    }
+
+    private void InjectStrayGetFeatureReplyBefore(ushort featureId, byte strayIndex)
+    {
+        var request = HidppProtocol.GetFeature(0x01, featureId, LogitechBatteryProvider.SoftwareId);
+        var injected = false;
+        _receiver.Noise = frame =>
+        {
+            if (injected || !frame.SequenceEqual(request)) return [];
+            injected = true;
+            return [(true, Long($"11 01 00 0C {strayIndex:X2} 00 01"))];
+        };
+    }
+
+    [Theory]
+    [InlineData(HidppFeature.FeatureSet, 0x0A)]
+    [InlineData(HidppFeature.DeviceFwInfo, 0x0A)]
+    [InlineData(HidppFeature.DeviceName, 0x06)] // would make 0x1004 fn2 (a set function) the device-type read
+    [InlineData(HidppFeature.WirelessDeviceStatus, 0x0A)]
+    [InlineData(HidppFeature.UnifiedBattery, 0x0A)]
+    public async Task Stray_get_feature_reply_is_caught_before_any_call_to_the_index_it_names(ushort featureId, byte strayIndex)
+    {
+        var device = _receiver.Pair(1);
+        device.Features[0x8071] = 0x0A; // RGB_EFFECTS: none of its functions is on the allow-list
+        InjectStrayGetFeatureReplyBefore(featureId, strayIndex);
+
+        var reading = await PollSingle();
+
+        Assert.Equal(DeviceStatus.Error, reading.Status);
+        Assert.Equal("logitech:B4655832", reading.DeviceId);
+        AssertEveryFeatureCallIsAReadOfTheFeatureReallyAtThatIndex(device);
+    }
+
+    [Fact]
+    public async Task After_a_stray_get_feature_reply_the_next_poll_resolves_from_scratch()
+    {
+        var device = _receiver.Pair(1);
+        device.Features[0x8071] = 0x0A;
+        InjectStrayGetFeatureReplyBefore(HidppFeature.DeviceFwInfo, 0x0A);
+        await PollSingle();
+        _receiver.Noise = null;
+        var lookups = _receiver.FeatureLookups;
+
+        var reading = await PollSingle();
+
+        Assert.Equal(DeviceStatus.Online, reading.Status);
+        Assert.Equal(56, reading.Components[0].Percent);
+        Assert.True(_receiver.FeatureLookups - lookups > 2);
+        AssertEveryFeatureCallIsAReadOfTheFeatureReallyAtThatIndex(device);
+    }
+
+    [Fact]
+    public async Task Every_feature_index_is_confirmed_with_get_feature_id_before_it_is_called()
+    {
+        _receiver.Pair(1);
+
+        await PollSingle();
+
+        var requests = _receiver.Requests.ToList();
+        foreach (var (position, frame) in requests.Index().Where(r => r.Item[1] == 0x01 && r.Item[2] is > 0x01 and < 0x80))
+        {
+            var confirmation = HidppProtocol.GetFeatureId(0x01, 0x01, frame[2], LogitechBatteryProvider.SoftwareId);
+            Assert.Contains(requests.Take(position), f => f.SequenceEqual(confirmation));
+        }
+    }
+
+    [Fact]
+    public async Task Device_without_feature_set_at_index_1_is_an_error_and_gets_no_feature_calls()
+    {
+        _receiver.Pair(1).MoveFeature(HidppFeature.FeatureSet, 0x09);
+
+        var reading = await PollSingle();
+
+        Assert.Equal(DeviceStatus.Error, reading.Status);
+        Assert.DoesNotContain(_receiver.Requests, f => f[1] == 0x01 && f[2] is > 0x00 and < 0x80);
+    }
+
     // Feature-index cache
 
     [Fact]

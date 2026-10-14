@@ -7,10 +7,10 @@ using BatteryInfo.Core.Safety;
 namespace BatteryInfo.Core.Vendors.Logitech;
 
 /// <summary>Reads Logitech devices over HID++ (docs/protocols/logitech.md §10). For each LIGHTSPEED or Unifying
-/// receiver the B5 registers list the paired slots; each slot is pinged, its features are resolved with IRoot, and the
-/// battery is read from 0x1004 (else 0x1000, 0x1001, 0x1F20). Every frame goes through
-/// <see cref="GuardedHidConnection"/> with the <see cref="LogitechCommandPolicy"/>, which only allows a feature call
-/// once this provider has registered the feature id it resolved for that index.
+/// receiver the B5 registers list the paired slots; each slot is pinged, its features are resolved with IRoot and
+/// confirmed with FEATURE_SET getFeatureId, and the battery is read from 0x1004 (else 0x1000, 0x1001, 0x1F20). Every
+/// frame goes through <see cref="GuardedHidConnection"/> with the <see cref="LogitechCommandPolicy"/>, which only allows
+/// a feature call once this provider has registered the feature id it resolved and confirmed for that index.
 /// <para>A device on its own cable (046D:C0A8) is the same HID++ device at index 0xFF; it reports the same unit id as
 /// its receiver slot, so the two paths give one reading.</para>
 /// <para>Resolved features, name and unit id are cached per device and reused by later polls, which then only ping,
@@ -29,6 +29,9 @@ public sealed class LogitechBatteryProvider : IBatteryProvider
     private const int MaxBusyRetries = 3;
     private const int MaxNameLength = 64;
     private const string NotResponding = "Not responding (asleep or off)";
+
+    /// <summary>FEATURE_SET (0x0001) is at this index on every device seen (§6); no other index is accepted for it.</summary>
+    private const byte FeatureSetIndex = 0x01;
 
     private static readonly SlotIdentity WiredIdentity = new(null, null, null, 0);
 
@@ -324,7 +327,7 @@ public sealed class LogitechBatteryProvider : IBatteryProvider
         }
         catch (HidppFailure f)
         {
-            if (f.Kind == FailureKind.StaleIndex) ForgetFeatures(known);
+            if (f.Kind is FailureKind.StaleIndex or FailureKind.Inconsistent) ForgetFeatures(known);
             return Reading(known, DeviceStatus.Error, GenericSource, detail: f.Message);
         }
         catch (UnsafeCommandException e)
@@ -394,25 +397,32 @@ public sealed class LogitechBatteryProvider : IBatteryProvider
         return reply is not null && HidppProtocol.ParseFeatureInfo(reply).Index == known.Features![feature];
     }
 
-    // IRoot getFeature for the info, name and battery features; registers each index with the policy before any
-    // call to it, then reads the unit id, name, kind and battery capabilities.
+    // IRoot getFeature for the info, name and battery features, each index confirmed with FEATURE_SET getFeatureId and
+    // registered with the policy only once all are confirmed; then reads the unit id, name, kind and battery
+    // capabilities. A getFeature reply does not name the feature it answers, so another program's reply that carries
+    // our software id would give the wrong index (§3: lamparray picks its software id at runtime). getFeatureId echoes
+    // the feature id, so such a reply is caught before any call to the index it names.
     private void Resolve(ChannelPoll poll, KnownDevice known, CancellationToken ct)
     {
         _policy.ForgetDevice(known.Channel, known.Index);
-        var features = new Dictionary<ushort, byte>();
+
+        // FEATURE_SET checks every other index, so it is bootstrapped at the one index every device seen has it at.
+        ct.ThrowIfCancellationRequested();
+        var featureSet = FeatureIndex(poll, known, HidppFeature.FeatureSet);
+        if (featureSet != FeatureSetIndex)
+            throw Inconsistent(known, $"FEATURE_SET reported at index 0x{featureSet:X2}, not 0x{FeatureSetIndex:X2}");
+        _policy.RegisterFeature(poll.Collections.Short, known.Index, FeatureSetIndex, HidppFeature.FeatureSet);
+        Confirm(poll, known, FeatureSetIndex, HidppFeature.FeatureSet);
+        var features = new Dictionary<ushort, byte> { [HidppFeature.FeatureSet] = FeatureSetIndex };
 
         bool Lookup(ushort featureId)
         {
             ct.ThrowIfCancellationRequested();
-            var reply = Optional(() => Call(poll, HidppProtocol.GetFeature(known.Index, featureId, SoftwareId)));
-            var index = reply is null ? (byte)0 : HidppProtocol.ParseFeatureInfo(reply).Index;
+            var index = FeatureIndex(poll, known, featureId);
             if (index == 0) return false;
             if (index >= 0x80 || features.ContainsValue(index))
-            {
-                Log.Warn($"Logitech device {known.Index}: feature 0x{featureId:X4} reported at index 0x{index:X2}, which is invalid or taken; ignoring it");
-                return false;
-            }
-            _policy.RegisterFeature(poll.Collections.Short, known.Index, index, featureId);
+                throw Inconsistent(known, $"feature 0x{featureId:X4} reported at index 0x{index:X2}, which is invalid or taken");
+            Confirm(poll, known, index, featureId);
             features[featureId] = index;
             return true;
         }
@@ -427,6 +437,8 @@ public sealed class LogitechBatteryProvider : IBatteryProvider
             battery = feature;
             break;
         }
+        foreach (var (featureId, index) in features.Where(f => f.Key != HidppFeature.FeatureSet))
+            _policy.RegisterFeature(poll.Collections.Short, known.Index, index, featureId);
 
         if (features.TryGetValue(HidppFeature.DeviceFwInfo, out var fwIndex)
             && Optional(() => Call(poll, Request(known, fwIndex, 0))) is { } info)
@@ -451,6 +463,31 @@ public sealed class LogitechBatteryProvider : IBatteryProvider
         known.Features = features;
         Log.Info($"Logitech device {known.Index} ({known.Name ?? "unnamed"}): HID++ {known.Protocol?.Major}.{known.Protocol?.Minor}, features "
             + string.Join(", ", features.Select(f => $"{f.Key:X4}@{f.Value:X2}")));
+    }
+
+    // IRoot getFeature: the index of the feature, 0 when the device does not have it.
+    private byte FeatureIndex(ChannelPoll poll, KnownDevice known, ushort featureId) =>
+        Optional(() => Call(poll, HidppProtocol.GetFeature(known.Index, featureId, SoftwareId))) is { } reply
+            ? HidppProtocol.ParseFeatureInfo(reply).Index
+            : (byte)0;
+
+    // FEATURE_SET getFeatureId(index) must name the feature getFeature gave that index. An error reply (index out of
+    // range) is a mismatch too.
+    private void Confirm(ChannelPoll poll, KnownDevice known, byte index, ushort featureId)
+    {
+        var reply = Optional(() => Call(poll, HidppProtocol.GetFeatureId(known.Index, FeatureSetIndex, index, SoftwareId)));
+        if (reply is null)
+            throw Inconsistent(known, $"getFeatureId(0x{index:X2}) was refused; expected feature 0x{featureId:X4}");
+        var actual = HidppProtocol.ParseFeatureId(reply);
+        if (actual != featureId)
+            throw Inconsistent(known, $"getFeatureId(0x{index:X2}) is 0x{actual:X4}; expected 0x{featureId:X4}");
+    }
+
+    private static HidppFailure Inconsistent(KnownDevice known, string reason)
+    {
+        Log.Warn($"Logitech device {known.Index}: {reason}. Another program's reply may have been taken for ours; "
+            + "nothing is registered and the features are resolved again next poll");
+        return new HidppFailure(FailureKind.Inconsistent, "Feature check failed; retrying next poll");
     }
 
     private string? ReadName(ChannelPoll poll, KnownDevice known, byte nameIndex)
@@ -605,6 +642,9 @@ public sealed class LogitechBatteryProvider : IBatteryProvider
 
         /// <summary>Any other HID++ 2.0 error.</summary>
         DeviceError,
+
+        /// <summary>getFeatureId did not confirm an index getFeature gave: nothing may be registered.</summary>
+        Inconsistent,
     }
 
     private sealed class HidppFailure(FailureKind kind, string message) : Exception(message)
