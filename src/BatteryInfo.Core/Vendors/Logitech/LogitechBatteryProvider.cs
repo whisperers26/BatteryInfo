@@ -469,9 +469,13 @@ public sealed class LogitechBatteryProvider : IBatteryProvider
             _ => HidppProtocol.DecodeAdcMeasurement(Call(poll, Request(known, index, 0))),
         };
         var source = $"HID++ 0x{feature:X4}";
-        if (battery is not { } value) return Reading(known, DeviceStatus.Asleep, source, detail: "Inactive (asleep or off)");
-        return Reading(known, DeviceStatus.Online, source, [BatteryComponent.Single(value.Percent, value.Charge)], value.Approximate);
+        return battery is { } value
+            ? Online(known, value, source)
+            : Reading(known, DeviceStatus.Asleep, source, detail: "Inactive (asleep or off)");
     }
+
+    private DeviceReading Online(KnownDevice known, HidppBattery battery, string source) =>
+        Reading(known, DeviceStatus.Online, source, [BatteryComponent.Single(battery.Percent, battery.Charge)], battery.Approximate);
 
     // A HID++ 2.0 call: the reply, or a HidppFailure. BUSY is retried; a 0x8F error from the receiver or no reply
     // means the device cannot be reached right now.
@@ -521,23 +525,24 @@ public sealed class LogitechBatteryProvider : IBatteryProvider
     private DeviceReading? Asleep(ChannelPoll poll, KnownDevice known, string detail)
     {
         if (known.UnitId is null && known.Identity.DeviceSerial is null) return null;
-        if (known.Name is null && known.Codename is null && Model(known) is null) known.Codename = TryReadCodename(poll, known);
+        EnsureCodename(poll, known);
         return Reading(known, DeviceStatus.Asleep, GenericSource, detail: detail);
     }
 
-    // B5/4n, best effort: the codename names a device that is not answering and is not in the model table.
-    private string? TryReadCodename(ChannelPoll poll, KnownDevice known)
+    // B5/4n, best effort, for a device that cannot tell its own name and is not in the model table.
+    private void EnsureCodename(ChannelPoll poll, KnownDevice known)
     {
-        if (poll.Gone || known.Index is < 1 or > MaxSlots) return null;
+        if (known.Name is not null || known.Codename is not null || Model(known) is not null) return;
+        if (poll.Gone || known.Index is < 1 or > MaxSlots) return;
         try
         {
             var reply = poll.Channel.Send(HidppProtocol.ReadReceiverInfo((byte)(0x40 + known.Index - 1)), _timings.Register);
-            return reply.Kind == HidppMatchKind.Reply && HidppProtocol.ParseCodename(reply.Report) is { Length: > 0 } codename ? codename : null;
+            if (reply.Kind == HidppMatchKind.Reply && HidppProtocol.ParseCodename(reply.Report) is { Length: > 0 } codename)
+                known.Codename = codename;
         }
         catch (HidIoException e)
         {
             poll.Gone |= e.DeviceGone;
-            return null;
         }
     }
 
