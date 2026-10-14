@@ -20,4 +20,8 @@
     <ProjectReference Include="..\BatteryInfo.Core\BatteryInfo.Core.csproj" />
   </ItemGroup>
 
+  <ItemGroup>
+    <InternalsVisibleTo Include="BatteryInfo.Core.Tests" />
+  </ItemGroup>
+
 </Project>
