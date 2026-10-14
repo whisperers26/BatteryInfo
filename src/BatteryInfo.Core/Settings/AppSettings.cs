@@ -6,12 +6,14 @@ namespace BatteryInfo.Core.Settings;
 /// <param name="NotificationsEnabled">Whether low-battery toasts are shown.</param>
 /// <param name="TraceFrames">Whether HID/SPP frames are written to the log.</param>
 /// <param name="AutoUpdate">Whether the app checks for, and downloads, updates by itself.</param>
+/// <param name="DeviceOrder">Device ids in the order the user dragged them into; null until they first do.</param>
 public sealed record AppSettings(
     int PollIntervalSeconds = 120,
     int LowBatteryThreshold = 20,
     bool NotificationsEnabled = true,
     bool TraceFrames = false,
-    bool AutoUpdate = true)
+    bool AutoUpdate = true,
+    IReadOnlyList<string>? DeviceOrder = null)
 {
     public const int MinPollIntervalSeconds = 10;
     public const int MaxPollIntervalSeconds = 24 * 60 * 60;

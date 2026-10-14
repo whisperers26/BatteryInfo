@@ -23,6 +23,9 @@ public interface IFlyoutServices
 
     void SetAutoUpdate(bool enabled);
 
+    /// <summary>The shown devices were dragged into this order.</summary>
+    void SetDeviceOrder(IReadOnlyList<string> shown);
+
     /// <summary>Checks for an update now, or restarts to install one already downloaded.</summary>
     void RunUpdateAction();
 }

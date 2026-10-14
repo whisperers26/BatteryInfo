@@ -43,6 +43,8 @@ of that build first. A local build does not update itself.
 - Only connected devices are listed: one that is asleep, switched off or unplugged disappears until it connects
   again (a device Windows will not let the app read stays, with the reason). Each row shows the level and
   whether the device is charging. Earbuds show left, right and case. Click a row for its last 7 days.
+- Drag a row up or down to reorder the devices. The order is remembered, including for devices that are
+  disconnected: one that comes back takes its old place.
 - A level marked ≈ is approximate. "Estimated" means the device reports only a voltage or a coarse level.
   "Approx. from Windows" means the HUAWEI earbuds' own battery channel could not be read (for example another
   app holds it), so Windows' value is shown, which can be about 5 points high; their 7-day chart shows only
