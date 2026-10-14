@@ -52,7 +52,8 @@ internal static class TrayIconRenderer
         }
     }
 
-    // WPF renders the glyph (premultiplied BGRA), scaled so its ink fills the square less a 1/16 border, centred.
+    // WPF renders the glyph (premultiplied BGRA) at the font's own size, where its strokes sit on whole pixels
+    // (Segoe Fluent Icons is drawn on a 1/16 em grid), centred by a whole-pixel offset so they stay sharp.
     private static byte[] RenderPixels(string glyph, Color color, int size)
     {
         var text = new FormattedText(glyph, CultureInfo.InvariantCulture, FlowDirection.LeftToRight,
@@ -60,14 +61,13 @@ internal static class TrayIconRenderer
             new SolidColorBrush(color), 1.0);
         var geometry = text.BuildGeometry(new Point(0, 0));
         var ink = geometry.Bounds;
-        var box = size - 2 * Math.Max(1, size / 16);
         var visual = new DrawingVisual();
         using (var dc = visual.RenderOpen())
         {
             if (!ink.IsEmpty && ink.Width > 0 && ink.Height > 0)
             {
-                var scale = Math.Min(box / ink.Width, box / ink.Height);
-                dc.PushTransform(new TranslateTransform((size - ink.Width * scale) / 2, (size - ink.Height * scale) / 2));
+                var scale = Math.Min(1.0, Math.Min(size / ink.Width, size / ink.Height));
+                dc.PushTransform(new TranslateTransform(Math.Round((size - ink.Width * scale) / 2), Math.Round((size - ink.Height * scale) / 2)));
                 dc.PushTransform(new ScaleTransform(scale, scale));
                 dc.PushTransform(new TranslateTransform(-ink.X, -ink.Y));
                 dc.DrawGeometry(new SolidColorBrush(color), null, geometry);
