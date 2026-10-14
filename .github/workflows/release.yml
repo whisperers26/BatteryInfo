@@ -1,0 +1,62 @@
+name: Release
+
+# Push a tag such as v1.2.3 to build the installer and publish it as a GitHub release.
+# The release holds BatteryInfoApp-win-Setup.exe for new installs, plus the packages and
+# releases.win.json feed that the installed app's updater reads.
+on:
+  push:
+    tags: ['v*.*.*']
+
+permissions:
+  contents: write
+
+env:
+  VPK_VERSION: 1.2.161
+
+jobs:
+  release:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 10.0.x
+
+      - name: Version from tag
+        id: version
+        shell: pwsh
+        run: |
+          $version = $env:GITHUB_REF_NAME.TrimStart('v')
+          "version=$version" >> $env:GITHUB_OUTPUT
+
+      - name: Test
+        run: dotnet test BatteryInfo.slnx -c Release
+
+      - name: Publish
+        run: >
+          dotnet publish src/BatteryInfo.App/BatteryInfo.App.csproj -c Release -r win-x64 --self-contained false
+          -p:Version=${{ steps.version.outputs.version }} -o publish
+
+      - name: Install vpk
+        run: dotnet tool install -g vpk --version ${{ env.VPK_VERSION }}
+
+      # The previous release lets vpk build a delta package, so updates download only what changed.
+      # The first release has nothing to download.
+      - name: Download previous release
+        continue-on-error: true
+        run: >
+          vpk download github --repoUrl ${{ github.server_url }}/${{ github.repository }}
+          --token ${{ secrets.GITHUB_TOKEN }} -o releases
+
+      - name: Pack
+        run: >
+          vpk pack --packId BatteryInfoApp --packVersion ${{ steps.version.outputs.version }}
+          --packDir publish --mainExe BatteryInfo.exe --packTitle BatteryInfo --packAuthors whisperers26
+          --runtime win-x64 --framework net10.0-x64-desktop -o releases
+
+      - name: Upload to GitHub release
+        run: >
+          vpk upload github --repoUrl ${{ github.server_url }}/${{ github.repository }}
+          --token ${{ secrets.GITHUB_TOKEN }} -o releases --publish
+          --releaseName "BatteryInfo ${{ steps.version.outputs.version }}" --tag ${{ github.ref_name }}

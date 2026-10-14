@@ -19,17 +19,21 @@ and BetopGame do not need to be running. It only ever sends read commands: see
 
 ## Install and run
 
-Needs the .NET 10 Desktop Runtime.
+Download `BatteryInfoApp-win-Setup.exe` from the latest
+[release](https://github.com/whisperers26/BatteryInfo/releases/latest) and run it. It installs BatteryInfo for
+your user only (no admin rights), installs the .NET 10 Desktop Runtime if it is missing, and starts the app
+in the tray. The installer is not code-signed, so Windows SmartScreen may ask you to confirm the first time
+(**More info**, then **Run anyway**). Turn on **Start with Windows** in the flyout (or the tray menu) to
+launch it at sign-in. Uninstall it from Windows Settings > Apps.
+
+### Building it yourself
 
 ```
 powershell -File scripts/publish.ps1 -Start
 ```
 
-This publishes the app to `%LOCALAPPDATA%\Programs\BatteryInfo` and starts it in the tray. Turn on
-**Start with Windows** in the flyout (or the tray menu) to launch it at sign-in.
-
-Run the same command to update. It first asks the running copy to close, so its tray icon goes away
-instead of staying behind next to the new one; a copy that does not close within 10 seconds is killed.
+This publishes a local build to `%LOCALAPPDATA%\Programs\BatteryInfo` and starts it, closing a running copy
+of that build first. A local build does not update itself.
 
 ## Using the tray app
 
