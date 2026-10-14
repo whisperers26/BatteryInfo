@@ -36,10 +36,10 @@ public sealed class LowBatteryPolicy
 
                 if (percent > Threshold || alerted.Contains(component.Name)) continue;
 
-                // A device read one battery at a time (HUAWEI over SPP) can fall back to one whole-device value (HFP):
-                // once one of its batteries has alerted, that value is the same discharge, so it neither alerts nor
-                // takes the place of a battery that has not alerted yet.
-                if (IsWholeDevice(component) && alerted.Any(name => name.Length > 0)) continue;
+                // A device read one battery at a time (HUAWEI over SPP) can fall back to one whole-device value (HFP)
+                // that stands for its earbuds, never its case: once an earbud has alerted, that value is the same
+                // discharge, so it neither alerts nor takes the place of an earbud that has not alerted yet.
+                if (IsWholeDevice(component) && alerted.Any(IsEarbud)) continue;
 
                 alerted.Add(component.Name);
 
@@ -69,6 +69,9 @@ public sealed class LowBatteryPolicy
     }
 
     private static bool IsWholeDevice(BatteryComponent component) => component.Name.Length == 0;
+
+    private static bool IsEarbud(string name) =>
+        name.Equals("Left", StringComparison.OrdinalIgnoreCase) || name.Equals("Right", StringComparison.OrdinalIgnoreCase);
 
     private static bool IsOnPower(ChargeState charge) =>
         charge is ChargeState.Charging or ChargeState.Full or ChargeState.NotCharging;

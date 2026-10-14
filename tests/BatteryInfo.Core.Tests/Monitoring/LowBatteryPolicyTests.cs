@@ -129,6 +129,17 @@ public class LowBatteryPolicyTests
     }
 
     [Fact]
+    public void Case_alert_does_not_silence_the_hfp_fallback()
+    {
+        var caseAlert = Assert.Single(_policy.Evaluate([Earbuds(left: 80, right: 80, @case: 18)]));
+        Assert.Equal("Case", caseAlert.Component);
+
+        var alert = Assert.Single(_policy.Evaluate([EarbudsOverHfp(20)]));
+        Assert.Equal("", alert.Component);
+        Assert.Empty(_policy.Evaluate([EarbudsOverHfp(19)]));
+    }
+
+    [Fact]
     public void Earbuds_do_not_alert_again_after_the_hfp_fallback_alerted()
     {
         Assert.Single(_policy.Evaluate([EarbudsOverHfp(20)]));
