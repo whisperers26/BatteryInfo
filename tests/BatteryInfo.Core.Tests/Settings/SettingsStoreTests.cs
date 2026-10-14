@@ -23,6 +23,17 @@ public sealed class SettingsStoreTests : IDisposable
         Assert.True(settings.NotificationsEnabled);
         Assert.False(settings.TraceFrames);
         Assert.True(settings.AutoUpdate);
+        Assert.Null(settings.DeviceOrder);
+    }
+
+    [Fact]
+    public void The_device_order_round_trips()
+    {
+        var store = new SettingsStore(SettingsPath);
+
+        store.Save(new AppSettings(DeviceOrder: ["rog:1", "logitech:2"]));
+
+        Assert.Equal(["rog:1", "logitech:2"], new SettingsStore(SettingsPath).Load().DeviceOrder!);
     }
 
     [Fact]
