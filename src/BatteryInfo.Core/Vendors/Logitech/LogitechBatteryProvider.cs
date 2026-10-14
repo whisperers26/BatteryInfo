@@ -360,10 +360,18 @@ public sealed class LogitechBatteryProvider : IBatteryProvider
         if (status.Kind == HidppMatchKind.Reply)
             return Online(known, HidppProtocol.DecodeRegisterBatteryStatus(status.Report), "HID++ 1.0 0x07");
 
-        return charge.TimedOut && status.TimedOut
-            ? Asleep(poll, known, NotResponding)
-            : Reading(known, DeviceStatus.Online, "HID++ 1.0", detail: "No battery register");
+        // Only a device that refused both registers itself has no battery register. No reply, or a receiver error such as
+        // 0x09, 0x04 or 0x08, means it cannot be reached now (§5, §8), as on the HID++ 2.0 path.
+        return IsRegisterRefused(charge) && IsRegisterRefused(status)
+            ? Reading(known, DeviceStatus.Online, "HID++ 1.0", detail: "No battery register")
+            : Asleep(poll, known, NotResponding);
     }
+
+    // The register does not exist or cannot be read: 0x02 INVALID_ADDRESS and the like, not an unreachable device.
+    private static bool IsRegisterRefused(HidppResult result) =>
+        result.Kind == HidppMatchKind.Hidpp10Error
+        && result.ErrorCode is HidppProtocol.ErrorInvalidSubId or HidppProtocol.ErrorInvalidAddress
+            or HidppProtocol.ErrorInvalidValue or HidppProtocol.ErrorRequestUnavailable or HidppProtocol.ErrorInvalidParamValue;
 
     // Features from the cache (after checking the battery index still holds the same feature) or resolved now. Error 6
     // drops the cache and retries once.

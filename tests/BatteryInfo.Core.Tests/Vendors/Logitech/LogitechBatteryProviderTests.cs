@@ -853,6 +853,34 @@ public class LogitechBatteryProviderTests
         Assert.Empty(reading.Components);
     }
 
+    [Theory]
+    [InlineData(0x09)] // RESOURCE_ERROR
+    [InlineData(0x04)] // CONNECT_FAIL
+    [InlineData(0x08)] // UNKNOWN_DEVICE
+    public async Task Hidpp10_device_the_receiver_cannot_reach_after_the_ping_is_asleep(byte error)
+    {
+        // Ping answered 10 01 8F 00 1C 01 00 (online), then e.g. 10 01 8F 81 0D 09 00 and 10 01 8F 81 07 09 00.
+        var device = PairHidpp10();
+        device.RegisterFailures[0x0D] = error;
+        device.RegisterFailures[0x07] = error;
+
+        var reading = await PollSingle();
+
+        Assert.Equal("logitech:B4655832", reading.DeviceId);
+        Assert.Equal(DeviceStatus.Asleep, reading.Status);
+        Assert.Empty(reading.Components);
+    }
+
+    [Fact]
+    public async Task Hidpp10_device_that_stops_answering_after_a_refused_register_is_asleep()
+    {
+        var device = PairHidpp10();
+        device.Register0D = null;             // refused: 0x02 INVALID_ADDRESS
+        device.RegisterFailures[0x07] = null; // no answer
+
+        Assert.Equal(DeviceStatus.Asleep, (await PollSingle()).Status);
+    }
+
     [Fact]
     public async Task Other_vendors_devices_are_never_opened()
     {

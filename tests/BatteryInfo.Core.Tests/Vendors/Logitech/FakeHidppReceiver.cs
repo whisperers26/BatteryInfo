@@ -66,6 +66,10 @@ internal sealed class FakeHidppDevice
 
     public byte[]? Register07 { get; set; } = [0x05, 0x00, 0x00];
 
+    /// <summary>Register reads the receiver answers with this 0x8F error code, or leaves unanswered when null (the
+    /// device went out of range after the ping).</summary>
+    public Dictionary<byte, byte?> RegisterFailures { get; } = [];
+
     /// <summary>HID++ 2.0 error codes to answer the next non-IRoot feature calls with.</summary>
     public Queue<byte> NextErrors { get; } = new();
 
@@ -146,6 +150,11 @@ internal sealed class FakeHidppReceiver
 
         if (frame[2] == 0x81)
         {
+            if (device.RegisterFailures.TryGetValue(frame[3], out var failure))
+            {
+                if (failure is { } code) ShortError(frame, code);
+                return;
+            }
             var value = frame[3] switch { 0x0D => device.Register0D, 0x07 => device.Register07, _ => null };
             if (device.Link != FakeLink.Hidpp10 || value is null) ShortError(frame, 0x02);
             else Short.Enqueue([0x10, deviceIndex, 0x81, frame[3], value[0], value[1], value[2]]);

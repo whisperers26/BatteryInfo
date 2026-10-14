@@ -87,9 +87,13 @@ public static class HidppProtocol
 
     // HID++ 1.0 error codes (0x8F reports).
     public const byte ErrorInvalidSubId = 0x01;
+    public const byte ErrorInvalidAddress = 0x02;
+    public const byte ErrorInvalidValue = 0x03;
     public const byte ErrorConnectFail = 0x04;
     public const byte ErrorUnknownDevice = 0x08;
     public const byte ErrorResourceError = 0x09;
+    public const byte ErrorRequestUnavailable = 0x0A;
+    public const byte ErrorInvalidParamValue = 0x0B;
 
     // HID++ 2.0 error codes (0xFF reports).
     public const byte ErrorInvalidFeatureIndex = 0x06;
