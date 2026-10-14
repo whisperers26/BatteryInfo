@@ -4,6 +4,7 @@ using System.Windows;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
 using BatteryInfo.App.Interop;
+using BatteryInfo.Core.Presentation;
 
 namespace BatteryInfo.App.Tray;
 
@@ -12,6 +13,18 @@ internal static class TrayIconRenderer
 {
     /// <summary>Battery (full) in Segoe Fluent Icons / Segoe MDL2 Assets.</summary>
     public const string BatteryGlyph = "";
+
+    /// <summary>The glyph for a level: Battery0-Battery10 or BatteryCharging0-BatteryCharging10, filled to the nearest
+    /// tenth. No level gives the full battery.</summary>
+    public static string GlyphFor(TrayLevel? level)
+    {
+        if (level is null) return BatteryGlyph;
+        var tenths = (int)Math.Round(Math.Clamp(level.Percent, 0, 100) / 10.0, MidpointRounding.AwayFromZero);
+        var glyph = tenths == 10
+            ? (level.Charging ? 0xE83E : 0xE83F)
+            : (level.Charging ? 0xE85A : 0xE850) + tenths;
+        return ((char)glyph).ToString();
+    }
 
     private static readonly FontFamily IconFont = new("Segoe Fluent Icons, Segoe MDL2 Assets");
 
