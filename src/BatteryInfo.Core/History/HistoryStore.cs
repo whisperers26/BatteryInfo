@@ -133,7 +133,8 @@ public sealed class HistoryStore(string directory, TimeProvider time)
         var records = componentRecords.OrderBy(r => ComponentOrder.Rank(r.Component)).ThenBy(r => r.Component).ToList();
         var newest = records.MaxBy(r => r.Time)!;
         return new DeviceReading(newest.DeviceId, newest.Vendor, newest.DeviceName, newest.Kind, DeviceStatus.Offline,
-            records.Select(r => new BatteryComponent(r.Component, r.Percent, r.Charge)).ToList(), newest.Time, "History");
+            records.Select(r => new BatteryComponent(r.Component, r.Percent, r.Charge)).ToList(), newest.Time, "History",
+            newest.Approximate);
     }
 
     private void Write(List<HistoryRecord> records)

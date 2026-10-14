@@ -286,6 +286,20 @@ public sealed class HistoryStoreTests : IDisposable
     }
 
     [Fact]
+    public void LastKnownReadings_keeps_the_approximate_mark_of_the_newest_value()
+    {
+        var store = NewStore();
+        store.Append([Mouse(60)]);
+        _time.Advance(TimeSpan.FromMinutes(2));
+        store.Append([Mouse(59, approximate: true)]);
+
+        var reading = Assert.Single(NewStore().LastKnownReadings());
+
+        Assert.True(reading.Approximate);
+        Assert.Equal(59, Assert.Single(reading.Components).Percent);
+    }
+
+    [Fact]
     public void Prune_deletes_month_files_that_ended_before_the_cutoff()
     {
         Directory.CreateDirectory(_directory);
