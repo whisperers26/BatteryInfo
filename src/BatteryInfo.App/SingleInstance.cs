@@ -1,3 +1,5 @@
+using BatteryInfo.App.Interop;
+
 namespace BatteryInfo.App;
 
 /// <summary>One running copy per user session (named mutex). A second launch asks the first one to show its
@@ -26,10 +28,11 @@ internal sealed class SingleInstance : IDisposable
         return new SingleInstance(mutex, new EventWaitHandle(false, EventResetMode.AutoReset, $@"Local\{name}.ShowFlyout"));
     }
 
-    /// <summary>Asks the running instance to show its flyout.</summary>
+    /// <summary>Asks the running instance to show its flyout, passing on this launch's right to come to the front.</summary>
     public static void RequestShow(string name)
     {
         if (!EventWaitHandle.TryOpenExisting($@"Local\{name}.ShowFlyout", out var request)) return;
+        NativeMethods.AllowSetForegroundWindow(NativeMethods.AsfwAny);
         using (request) request.Set();
     }
 
