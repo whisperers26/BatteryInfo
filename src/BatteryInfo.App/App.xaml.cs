@@ -65,10 +65,24 @@ public partial class App : Application, IFlyoutServices
         var root = DataRoot(_options.Demo);
         var logs = Path.Combine(root, "logs");
         Log.Configure(logs, traceFrames: false);
+        try
+        {
+            Start(root, logs, e.Args);
+        }
+        catch (Exception ex)
+        {
+            // Without this the dispatcher handler would swallow it and leave an invisible process holding the mutex.
+            Log.Error("Start-up failed", ex);
+            Shutdown(1);
+        }
+    }
+
+    private void Start(string root, string logs, string[] args)
+    {
         _settingsStore = new SettingsStore(Path.Combine(root, "settings.json"));
         _settings = _settingsStore.Load();
         if (_settings.TraceFrames) Log.Configure(logs, traceFrames: true);
-        Log.Info($"BatteryInfo starting (args: {string.Join(' ', e.Args)}; per-monitor DPI set: {DpiAwarenessSet})");
+        Log.Info($"BatteryInfo starting (args: {string.Join(' ', args)}; per-monitor DPI set: {DpiAwarenessSet})");
         HookUnhandledExceptions();
 
         var historyDirectory = Path.Combine(root, "history");
@@ -106,7 +120,7 @@ public partial class App : Application, IFlyoutServices
             Threshold = _settings.LowBatteryThreshold,
             Enabled = _settings.NotificationsEnabled,
         };
-        _instance.ListenForShowRequests(() => Dispatcher.BeginInvoke(ShowFlyout));
+        _instance?.ListenForShowRequests(() => Dispatcher.BeginInvoke(ShowFlyout));
 
         SystemEvents.PowerModeChanged += OnPowerModeChanged;
         ApplySnapshot(store.Snapshot());
