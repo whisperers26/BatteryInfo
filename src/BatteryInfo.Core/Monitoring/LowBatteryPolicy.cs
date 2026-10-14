@@ -8,6 +8,7 @@ public sealed record LowBatteryAlert(string DeviceId, string DeviceName, string 
 public sealed class LowBatteryPolicy
 {
     private const int RearmMargin = 5;
+    private const string WholeDevice = "";
 
     // Device id -> names of its components that have alerted in the current discharge.
     private readonly Dictionary<string, HashSet<string>> _alerted = new(StringComparer.OrdinalIgnoreCase);
@@ -41,8 +42,18 @@ public sealed class LowBatteryPolicy
                 if (IsWholeDevice(component) && alerted.Any(name => name.Length > 0)) continue;
 
                 alerted.Add(component.Name);
+
+                // The other way round: when the batteries are read again after the whole-device value alerted, the ones
+                // at or below the threshold take over that alert without raising another.
+                if (!IsWholeDevice(component) && alerted.Contains(WholeDevice)) continue;
+
                 alerts.Add(new LowBatteryAlert(reading.DeviceId, reading.Name, component.Name, percent));
             }
+
+            // Handed over: from here each battery alerts on its own. The whole-device value cannot say which battery it
+            // stood for (HUAWEI's may be the right bud alone), and HFP's charge state is always unknown, so a kept
+            // whole-device alert would only re-arm on another HFP reading and could silence the next discharge.
+            if (reading.Components.Any(c => !IsWholeDevice(c) && c.Percent is not null)) alerted.Remove(WholeDevice);
         }
         return alerts;
     }

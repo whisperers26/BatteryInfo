@@ -15,10 +15,10 @@ public class LowBatteryPolicyTests
         return new DeviceState(reading, reading);
     }
 
-    private static DeviceState Earbuds(int left, int right)
+    private static DeviceState Earbuds(int left, int right, ChargeState charge = ChargeState.Discharging, int @case = 100)
     {
         var reading = new DeviceReading("huawei:1", "HUAWEI", "HUAWEI FreeClip 2", DeviceKind.Earbuds, DeviceStatus.Online,
-            [new("Left", left, ChargeState.Discharging), new("Right", right, ChargeState.Discharging), new("Case", 100, ChargeState.Discharging)],
+            [new("Left", left, charge), new("Right", right, charge), new("Case", @case, charge)],
             DateTimeOffset.UnixEpoch, "SPP");
         return new DeviceState(reading, reading);
     }
@@ -126,6 +126,46 @@ public class LowBatteryPolicyTests
 
         var second = Assert.Single(_policy.Evaluate([Earbuds(left: 14, right: 19)]));
         Assert.Equal("Right", second.Component);
+    }
+
+    [Fact]
+    public void Earbuds_do_not_alert_again_after_the_hfp_fallback_alerted()
+    {
+        Assert.Single(_policy.Evaluate([EarbudsOverHfp(20)]));
+
+        Assert.Empty(_policy.Evaluate([Earbuds(left: 14, right: 40)]));
+        Assert.Empty(_policy.Evaluate([EarbudsOverHfp(19)]));
+        Assert.Empty(_policy.Evaluate([Earbuds(left: 13, right: 39)]));
+    }
+
+    [Fact]
+    public void Hfp_alert_does_not_use_up_the_other_earbud_alert()
+    {
+        Assert.Single(_policy.Evaluate([EarbudsOverHfp(20)]));
+        Assert.Empty(_policy.Evaluate([Earbuds(left: 14, right: 40)]));
+
+        var alert = Assert.Single(_policy.Evaluate([Earbuds(left: 13, right: 19)]));
+        Assert.Equal("Right", alert.Component);
+    }
+
+    [Fact]
+    public void Hfp_alert_rearms_when_the_earbuds_charge()
+    {
+        Assert.Single(_policy.Evaluate([EarbudsOverHfp(20)]));
+        Assert.Empty(_policy.Evaluate([Earbuds(left: 60, right: 60, ChargeState.Charging)]));
+
+        var alert = Assert.Single(_policy.Evaluate([Earbuds(left: 20, right: 40)]));
+        Assert.Equal("Left", alert.Component);
+    }
+
+    [Fact]
+    public void Hfp_alert_rearms_when_the_earbuds_come_back_charged_whatever_the_case_reads()
+    {
+        Assert.Single(_policy.Evaluate([EarbudsOverHfp(20)]));
+        Assert.Empty(_policy.Evaluate([Earbuds(left: 90, right: 90, @case: 22)]));
+
+        var alert = Assert.Single(_policy.Evaluate([Earbuds(left: 20, right: 85, @case: 22)]));
+        Assert.Equal("Left", alert.Component);
     }
 
     [Fact]
