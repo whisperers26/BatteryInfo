@@ -223,9 +223,17 @@ internal sealed class FakeHidppReceiver
             LongError(frame, code);
             return;
         }
-        var feature = device.Features.Where(f => f.Value == frame[2]).Select(f => (ushort?)f.Key).FirstOrDefault();
+        var feature = FeatureAt(device, frame[2]);
+        var asked = FeatureAt(device, frame[4]); // FEATURE_SET getFeatureId: the feature at index p0
+        if (feature == 0x0001 && function == 1 && asked is null)
+        {
+            LongError(frame, 0x02); // an index out of range: INVALID_ARGUMENT (verified)
+            return;
+        }
         byte[]? payload = (feature, function) switch
         {
+            (0x0001, 0) => [(byte)device.Features.Count],
+            (0x0001, 1) => [(byte)(asked!.Value >> 8), (byte)asked.Value, 0x00, 0x05],
             (0x0003, 0) => DeviceInfo(device),
             (0x0005, 0) => [(byte)device.Name.Length],
             (0x0005, 1) => [.. Encoding.ASCII.GetBytes(device.Name).Skip(frame[4]).Take(16)],
@@ -241,6 +249,9 @@ internal sealed class FakeHidppReceiver
         else if (payload is null) LongError(frame, 0x07);
         else LongReply(frame, payload);
     }
+
+    private static ushort? FeatureAt(FakeHidppDevice device, byte index) =>
+        device.Features.Where(f => f.Value == index).Select(f => (ushort?)f.Key).FirstOrDefault();
 
     private static byte[] DeviceInfo(FakeHidppDevice device)
     {
