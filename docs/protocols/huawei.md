@@ -81,6 +81,7 @@ B) BCL only:
 - Observed bytes: 5A 00 1B 00 01 08 | 01 01 4B | 02 03 4C 4B 64 | 03 03 00 00 00 | 04 02 14 0A | 05 02 00 00 | 06 01 0A | AB 24 (32 bytes, LEN 0x1B).
 - T1, len 1: device aggregate %, 0..100.
   - In every sample it equalled min(L, R), which was also R (R <= L each time), so it is unknown whether T1 is min or the right bud.
+  - Re-checked 2026-10-14 13:27 through the provider: L 64 / R 63 / case 100 with T1 = 63, still both min(L, R) and R.
   - Show T2 values. Use T1 only when T2 is missing.
 - T2, len 3: [left %, right %, case %], range 0..100. Observed 80/78/100 down to 76/75/100 over 20 min.
 - T3, len 3: charging flags [left, right, case]; 1 = charging, 0 = not.
@@ -127,6 +128,7 @@ B) BCL only:
 - Node: BTHENUM\{0000111E-0000-1000-8000-00805F9B34FB}_VID&0001027D_PID&4113\B&23FB693A&0&C0DA5EA83EC7_C00000000. Class System, "HUAWEI FreeClip 2 Hands-Free AG".
 - Key: fmtid {104EA319-6EE2-4701-BD47-8DDBF425BBE5}, pid 2. DEVPROP_TYPE_BYTE (0x03), size 1, 0..100.
 - Accuracy: it read 80 throughout, including after fresh headset reports at 12:19:36 and 12:22:34. Over the same period SPP said 80 falling to 75 (L76/R75 at the end).
+- At 13:27 HFP read 70 while SPP said L 64 / R 63, so the overstatement grew to about 6 points. While one SPP link was held, a second connect failed with WSAEADDRINUSE (10048) and the provider's HFP fallback worked.
   - It rounds UP and can overstate by 5+ points.
   - Step size is unverified, since only 80 was seen. Likely +IPHONEACCEV 0..9 shown as (n+1)*10.
   - No L/R/case, no charging state. Show it as "~80%".
