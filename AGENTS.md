@@ -7,6 +7,7 @@ into firmware-update mode.
 
 - Branches, PRs, CI and self-merging → [.agents/wiki/git-workflow.md](.agents/wiki/git-workflow.md)
 - The owner's devices, allowed commands, live checks → [.agents/wiki/hardware-safety.md](.agents/wiki/hardware-safety.md)
+- What your commands can change from the Claude desktop app (it sandboxes them) → [.agents/wiki/claude-desktop-container.md](.agents/wiki/claude-desktop-container.md)
 - Unverified behaviour and open questions → [.agents/wiki/known-issues.md](.agents/wiki/known-issues.md)
 - One reverse-engineered protocol per vendor → [docs/protocols/README.md](docs/protocols/README.md)
 - Design spec → [docs/superpowers/specs/2026-10-14-battery-tray-app-design.md](docs/superpowers/specs/2026-10-14-battery-tray-app-design.md)
@@ -34,7 +35,7 @@ dotnet test BatteryInfo.slnx
 dotnet run --project src/BatteryInfo.Cli -- list --trace      # read every device once, frames on stderr
 dotnet run --project src/BatteryInfo.Cli -- hid               # HID collections on this PC
 dotnet run --project src/BatteryInfo.App -- --demo           # tray app with sample devices (own data folder)
-powershell -File scripts/publish.ps1 -Start                   # local build to %LOCALAPPDATA%\Programs\BatteryInfo
+powershell -File scripts/publish.ps1 -Start                   # local build to %LOCALAPPDATA%\Programs\BatteryInfo (sandboxed if run from Claude)
 git tag v1.2.3 && git push origin v1.2.3                     # release: Setup.exe + update feed (on main only)
 ```
 
