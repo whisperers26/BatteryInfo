@@ -122,7 +122,8 @@ public interface IBatteryProvider : IDisposable
   never affects the others. It publishes snapshots through `SnapshotChanged`.
 - `DeviceStore` merges readings into per-device state:
   - keeps the latest reading and the latest reading that had a battery value;
-  - a device missing from its vendor's latest poll becomes `Offline` (last value kept);
+  - a device missing from its vendor's latest poll becomes `Offline` (last value kept); one that
+    never had a battery value (such as a receiver's error row) is dropped instead;
   - an `Asleep`/`Error` reading without components keeps showing the last value as stale;
   - devices not seen for 7 days are dropped from the view.
 - `LowBatteryPolicy` (pure): fires once when a component is at or below the threshold
