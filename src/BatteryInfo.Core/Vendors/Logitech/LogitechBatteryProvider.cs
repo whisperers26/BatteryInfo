@@ -11,6 +11,8 @@ namespace BatteryInfo.Core.Vendors.Logitech;
 /// battery is read from 0x1004 (else 0x1000, 0x1001, 0x1F20). Every frame goes through
 /// <see cref="GuardedHidConnection"/> with the <see cref="LogitechCommandPolicy"/>, which only allows a feature call
 /// once this provider has registered the feature id it resolved for that index.
+/// <para>A device on its own cable (046D:C0A8) is the same HID++ device at index 0xFF; it reports the same unit id as
+/// its receiver slot, so the two paths give one reading.</para>
 /// <para>Resolved features, name and unit id are cached per device and reused by later polls, which then only ping,
 /// re-check the battery feature's index with IRoot, and read the battery. The cache is dropped when the receiver
 /// reports another device in the slot or disappears, and its feature indexes when the device reconnects (0x1D4B
@@ -27,6 +29,8 @@ public sealed class LogitechBatteryProvider : IBatteryProvider
     private const int MaxBusyRetries = 3;
     private const int MaxNameLength = 64;
     private const string NotResponding = "Not responding (asleep or off)";
+
+    private static readonly SlotIdentity WiredIdentity = new(null, null, null, 0);
 
     // In the order this app prefers them; a device normally has only one.
     private static readonly ushort[] BatteryFeatures =
@@ -93,8 +97,25 @@ public sealed class LogitechBatteryProvider : IBatteryProvider
             ct.ThrowIfCancellationRequested();
             readings.AddRange(PollChannel(collections, ct));
         }
-        return readings;
+        return Deduplicate(readings);
     }
+
+    // A mouse on its cable can also be paired to a receiver: both paths report the same unit id. Keep the most useful
+    // reading of each device: online with a battery value, then online, asleep, needs access, error.
+    private static List<DeviceReading> Deduplicate(List<DeviceReading> readings) =>
+        readings
+            .GroupBy(r => r.DeviceId, StringComparer.OrdinalIgnoreCase)
+            .Select(g => g.OrderBy(Rank).First())
+            .ToList();
+
+    private static int Rank(DeviceReading reading) => reading.Status switch
+    {
+        DeviceStatus.Online when reading.HasBattery => 0,
+        DeviceStatus.Online => 1,
+        DeviceStatus.Asleep => 2,
+        DeviceStatus.NeedsAccess => 3,
+        _ => 4,
+    };
 
     private List<DeviceReading> PollChannel(HidppCollections collections, CancellationToken ct)
     {
@@ -115,7 +136,8 @@ public sealed class LogitechBatteryProvider : IBatteryProvider
         {
             try
             {
-                ReadReceiver(poll, readings, ct);
+                if (LogitechModels.IsWired(collections.Short.ProductId)) ReadWired(poll, readings, ct);
+                else ReadReceiver(poll, readings, ct);
             }
             catch (HidIoException e) when (e.DeviceGone)
             {
@@ -262,6 +284,14 @@ public sealed class LogitechBatteryProvider : IBatteryProvider
             var identity = new SlotIdentity(receiverSerial, serial, pairingInfo.Wpid, pairingInfo.Kind);
             if (ReadDevice(poll, Remember(poll.Collections, (byte)slot, identity), ct) is { } reading) readings.Add(reading);
         }
+    }
+
+    // A device on its own cable answers at device index 0xFF; there are no receiver registers to read.
+    private void ReadWired(ChannelPoll poll, List<DeviceReading> readings, CancellationToken ct)
+    {
+        var known = Remember(poll.Collections, HidppProtocol.ReceiverIndex, WiredIdentity);
+        known.UsbPid ??= poll.Collections.Short.ProductId;
+        if (ReadDevice(poll, known, ct) is { } reading) readings.Add(reading);
     }
 
     private DeviceReading? ReadDevice(ChannelPoll poll, KnownDevice known, CancellationToken ct)

@@ -587,6 +587,82 @@ public class LogitechBatteryProviderTests
         Assert.Empty(await _provider.PollAsync(CancellationToken.None));
     }
 
+    // On its own cable (046D:C0A8, device index 0xFF)
+
+    private FakeHidppDevice PlugCable(FakeHidppDevice? device = null)
+    {
+        var cable = new FakeHidppReceiver(_backend, 0xC0A8, @"USB\VID_046D&PID_C0A8&MI_01\7&2A6B2F3&0&0001", wired: true);
+        return cable.Pair(0xFF, device ?? new FakeHidppDevice { UnifiedStatus = [0x3A, 0x04, 0x01, 0x01] });
+    }
+
+    [Fact]
+    public async Task Wired_mouse_is_read_at_device_index_0xFF_without_receiver_registers()
+    {
+        PlugCable();
+
+        var reading = await PollSingle();
+
+        Assert.Equal("logitech:B4655832", reading.DeviceId);
+        Assert.Equal("PRO X2 SUPERSTRIKE", reading.Name);
+        Assert.Equal([BatteryComponent.Single(58, ChargeState.Charging)], reading.Components);
+        var cable = _backend.Devices.Single(d => d.Info.ProductId == 0xC0A8 && d.Info.Usage == 0x0001);
+        Assert.All(cable.Written, f => Assert.Equal(0xFF, f[1]));
+        Assert.DoesNotContain(cable.Written, f => f[2] >= 0x80);
+    }
+
+    [Fact]
+    public async Task Mouse_on_cable_and_asleep_in_its_receiver_slot_is_one_online_reading()
+    {
+        _receiver.Pair(1).Link = FakeLink.Asleep;
+        PlugCable();
+
+        var reading = await PollSingle();
+
+        Assert.Equal(DeviceStatus.Online, reading.Status);
+        Assert.Equal(ChargeState.Charging, reading.Components[0].Charge);
+    }
+
+    [Fact]
+    public async Task Mouse_answering_on_both_paths_is_one_reading()
+    {
+        _receiver.Pair(1);
+        PlugCable();
+
+        var reading = await PollSingle();
+
+        Assert.Equal(DeviceStatus.Online, reading.Status);
+    }
+
+    [Fact]
+    public async Task Different_devices_on_cable_and_receiver_are_both_reported()
+    {
+        _receiver.Pair(1);
+        PlugCable(new FakeHidppDevice { UnitId = 0x22222222 });
+
+        Assert.Equal(2, (await _provider.PollAsync(CancellationToken.None)).Count);
+    }
+
+    [Fact]
+    public async Task Silent_wired_device_never_seen_before_gives_no_reading()
+    {
+        PlugCable().Link = FakeLink.Silent;
+
+        Assert.Empty(await _provider.PollAsync(CancellationToken.None));
+    }
+
+    [Fact]
+    public async Task Silent_wired_device_seen_before_is_asleep()
+    {
+        var device = PlugCable();
+        await PollSingle();
+        device.Link = FakeLink.Silent;
+
+        var reading = await PollSingle();
+
+        Assert.Equal("logitech:B4655832", reading.DeviceId);
+        Assert.Equal(DeviceStatus.Asleep, reading.Status);
+    }
+
     [Fact]
     public async Task Other_vendors_devices_are_never_opened()
     {

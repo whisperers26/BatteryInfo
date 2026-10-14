@@ -12,7 +12,7 @@ internal static class LogitechModels
     private static readonly HashSet<ushort> Receivers = [0xC52B, 0xC532, 0xC539, 0xC53A, 0xC53D, 0xC53F, 0xC541, 0xC545, 0xC547, 0xC54D];
 
     // Devices on their own USB cable, addressed as device index 0xFF.
-    private static readonly HashSet<ushort> WiredDevices = [];
+    private static readonly HashSet<ushort> WiredDevices = [0xC0A8];
 
     private static readonly (ushort Wpid, ushort UsbPid, string Name, DeviceKind Kind)[] Models =
     [
