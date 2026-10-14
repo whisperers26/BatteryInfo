@@ -40,6 +40,7 @@ public partial class App : Application, IFlyoutServices
     private FlyoutViewModel? _flyoutViewModel;
     private FlyoutWindow? _flyout;
     private LowBatteryNotifier? _notifier;
+    private StartWithWindowsSwitch? _startWithWindows;
 
     // Before WPF or WinForms create any window, so both lay out per monitor. This constructor must not mention
     // other WPF types: compiling it would load WPF, which fixes the DPI awareness first.
@@ -104,15 +105,18 @@ public partial class App : Application, IFlyoutServices
             TimeSpan.FromSeconds(_settings.PollIntervalSeconds), ProviderTimeout);
         _monitor.SnapshotChanged += OnSnapshotChanged;
 
+        // The demo shares the Run value with the installed app, so its switch must never touch it.
+        var startWithWindows = new StartWithWindowsSwitch(sandboxed: _options.Demo, AutoStart.IsEnabled, AutoStart.SetEnabled);
+        _startWithWindows = startWithWindows;
         _flyoutViewModel = new FlyoutViewModel(this, _settings);
         _tray = new TrayIconHost(Dispatcher);
         _tray.LeftClicked += (_, _) => ToggleFlyout();
         _tray.RefreshClicked += (_, _) => _ = _monitor.RefreshAsync();
         _tray.ExitClicked += (_, _) => Shutdown();
-        _tray.IsStartWithWindows = AutoStart.IsEnabled;
+        _tray.IsStartWithWindows = () => startWithWindows.IsOn;
         _tray.StartWithWindowsClicked += (_, _) =>
         {
-            AutoStart.SetEnabled(!AutoStart.IsEnabled());
+            startWithWindows.Toggle();
             _flyoutViewModel?.ReloadStartWithWindows();
         };
         _notifier = new LowBatteryNotifier(_tray.ShowWarning)
@@ -232,9 +236,9 @@ public partial class App : Application, IFlyoutServices
         return HistorySeries.Build(_history.Query(deviceId, since), maxGap);
     }
 
-    bool IFlyoutServices.IsStartWithWindowsEnabled() => AutoStart.IsEnabled();
+    bool IFlyoutServices.IsStartWithWindowsEnabled() => _startWithWindows?.IsOn ?? false;
 
-    void IFlyoutServices.SetStartWithWindows(bool enabled) => AutoStart.SetEnabled(enabled);
+    void IFlyoutServices.SetStartWithWindows(bool enabled) => _startWithWindows?.Set(enabled);
 
     void IFlyoutServices.SetLowBatteryThreshold(int percent)
     {
