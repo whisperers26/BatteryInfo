@@ -22,6 +22,7 @@ public sealed class SettingsStoreTests : IDisposable
         Assert.Equal(20, settings.LowBatteryThreshold);
         Assert.True(settings.NotificationsEnabled);
         Assert.False(settings.TraceFrames);
+        Assert.True(settings.AutoUpdate);
     }
 
     [Fact]
@@ -47,7 +48,8 @@ public sealed class SettingsStoreTests : IDisposable
     public void Save_then_Load_round_trips_and_creates_the_directory()
     {
         var store = new SettingsStore(SettingsPath);
-        var saved = new AppSettings(PollIntervalSeconds: 300, LowBatteryThreshold: 15, NotificationsEnabled: false, TraceFrames: true);
+        var saved = new AppSettings(PollIntervalSeconds: 300, LowBatteryThreshold: 15, NotificationsEnabled: false, TraceFrames: true,
+            AutoUpdate: false);
 
         store.Save(saved);
 

@@ -5,11 +5,13 @@ namespace BatteryInfo.Core.Settings;
 /// <param name="LowBatteryThreshold">A component at or below this percent, not charging, raises a toast.</param>
 /// <param name="NotificationsEnabled">Whether low-battery toasts are shown.</param>
 /// <param name="TraceFrames">Whether HID/SPP frames are written to the log.</param>
+/// <param name="AutoUpdate">Whether the app checks for, and downloads, updates by itself.</param>
 public sealed record AppSettings(
     int PollIntervalSeconds = 120,
     int LowBatteryThreshold = 20,
     bool NotificationsEnabled = true,
-    bool TraceFrames = false)
+    bool TraceFrames = false,
+    bool AutoUpdate = true)
 {
     public const int MinPollIntervalSeconds = 10;
     public const int MaxPollIntervalSeconds = 24 * 60 * 60;
