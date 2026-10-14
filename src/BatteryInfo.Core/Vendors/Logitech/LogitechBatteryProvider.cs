@@ -149,12 +149,12 @@ public sealed class LogitechBatteryProvider : IBatteryProvider
             catch (HidIoException e)
             {
                 Log.Warn($"Logitech {collections.Short.Label}: {e.Message}");
-                readings.Add(ChannelReading(collections, DeviceStatus.Error, $"I/O error (Win32 error {e.Win32Error})"));
+                ChannelFailed(collections, readings, DeviceStatus.Error, $"I/O error (Win32 error {e.Win32Error})");
             }
             catch (UnsafeCommandException e)
             {
                 Log.Error($"Logitech {collections.Short.Label}: a frame was refused by the allow-list", e);
-                readings.Add(ChannelReading(collections, DeviceStatus.Error, "Internal error: unsafe command refused"));
+                ChannelFailed(collections, readings, DeviceStatus.Error, "Internal error: unsafe command refused");
             }
         }
 
@@ -248,6 +248,20 @@ public sealed class LogitechBatteryProvider : IBatteryProvider
             : (DeviceStatus.Error, $"Cannot open the receiver (Win32 error {e.Win32Error})");
         var known = KnownOn(collections).Select(k => Reading(k, status, GenericSource, detail: detail)).ToList();
         return known.Count > 0 ? known : [ChannelReading(collections, status, detail)];
+    }
+
+    // The receiver failed part-way through a poll: the devices already read keep their readings, the other known devices
+    // get the failure, and the receiver itself is reported only when no device on it is known.
+    private void ChannelFailed(HidppCollections collections, List<DeviceReading> readings, DeviceStatus status, string detail)
+    {
+        var known = KnownOn(collections);
+        if (known.Count == 0)
+        {
+            readings.Add(ChannelReading(collections, status, detail));
+            return;
+        }
+        var read = readings.Select(r => r.DeviceId).ToHashSet(StringComparer.OrdinalIgnoreCase);
+        readings.AddRange(known.Select(k => Reading(k, status, GenericSource, detail: detail)).Where(r => !read.Contains(r.DeviceId)));
     }
 
     // B5/03 for the slot count, then per slot B5/2n (empty slot: 0x8F error) and B5/3n for the device serial.

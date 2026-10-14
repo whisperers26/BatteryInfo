@@ -737,6 +737,62 @@ public class LogitechBatteryProviderTests
     }
 
     [Fact]
+    public async Task Receiver_io_error_after_a_good_poll_is_reported_on_the_known_devices()
+    {
+        _receiver.Pair(1);
+        _receiver.Pair(2, new FakeHidppDevice { UnitId = 0x0BADF00D, Name = "G915 X", DeviceType = 0 });
+        await _provider.PollAsync(CancellationToken.None);
+        FailReceiverRegisterRead(0x03);
+
+        var readings = await _provider.PollAsync(CancellationToken.None);
+
+        Assert.Equal(["logitech:0BADF00D", "logitech:B4655832"], readings.Select(r => r.DeviceId).Order());
+        Assert.All(readings, r =>
+        {
+            Assert.Equal(DeviceStatus.Error, r.Status);
+            Assert.Equal("I/O error (Win32 error 87)", r.Detail);
+        });
+    }
+
+    [Fact]
+    public async Task Receiver_io_error_mid_poll_keeps_the_devices_read_and_reports_the_rest()
+    {
+        _receiver.Pair(1);
+        _receiver.Pair(2, new FakeHidppDevice { UnitId = 0x0BADF00D, Name = "G915 X", DeviceType = 0 });
+        await _provider.PollAsync(CancellationToken.None);
+        FailReceiverRegisterRead(0x21);
+
+        var readings = await _provider.PollAsync(CancellationToken.None);
+
+        Assert.Equal(2, readings.Count);
+        Assert.Equal(DeviceStatus.Online, readings.Single(r => r.DeviceId == "logitech:B4655832").Status);
+        var unread = readings.Single(r => r.DeviceId == "logitech:0BADF00D");
+        Assert.Equal(DeviceStatus.Error, unread.Status);
+        Assert.Equal("G915 X", unread.Name);
+    }
+
+    [Fact]
+    public async Task Receiver_io_error_before_any_device_is_known_is_reported_on_the_receiver()
+    {
+        _receiver.Pair(1);
+        FailReceiverRegisterRead(0x03);
+
+        var reading = await PollSingle();
+
+        Assert.Equal("logitech:usb-C54D", reading.DeviceId);
+        Assert.Equal(DeviceStatus.Error, reading.Status);
+    }
+
+    // The receiver fails (not unplugged) on the read that answers the B5 register request with this sub-address.
+    private void FailReceiverRegisterRead(byte register) =>
+        _receiver.Noise = frame =>
+        {
+            if (frame[1] == 0xFF && frame[2] == 0x83 && frame[3] == 0xB5 && frame[4] == register)
+                _receiver.Long.ReadError = new HidIoException("ReadFile", 87);
+            return [];
+        };
+
+    [Fact]
     public async Task Unpaired_slot_is_forgotten()
     {
         _receiver.Pair(1);
