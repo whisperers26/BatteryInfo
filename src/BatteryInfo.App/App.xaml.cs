@@ -232,7 +232,7 @@ public partial class App : Application, IFlyoutServices
     private void ApplySnapshot(IReadOnlyList<DeviceState> snapshot)
     {
         // Only connected devices are listed; history and alerts still see every device.
-        var connected = ConnectedDevices.Filter(snapshot);
+        var connected = DeviceOrder.Sort(ConnectedDevices.Filter(snapshot), _settings.DeviceOrder ?? []);
         _tray?.SetTooltip(TrayTooltip.Build(connected));
         _flyoutViewModel?.Update(connected, _monitor?.LastRefresh);
         _notifier?.Process(snapshot);
@@ -299,6 +299,9 @@ public partial class App : Application, IFlyoutServices
     }
 
     void IFlyoutServices.RunUpdateAction() => RunUpdateAction();
+
+    void IFlyoutServices.SetDeviceOrder(IReadOnlyList<string> shown) =>
+        UpdateSettings(_settings with { DeviceOrder = DeviceOrder.Merge(_settings.DeviceOrder ?? [], shown) });
 
     void IFlyoutServices.SetNotificationsEnabled(bool enabled)
     {

@@ -3,7 +3,7 @@ using BatteryInfo.Core.History;
 
 namespace BatteryInfo.Core.Tests.Fakes;
 
-/// <summary>Flyout services that do nothing: for view-model tests.</summary>
+/// <summary>Flyout services that do nothing but remember the device order they were given: for view-model tests.</summary>
 internal sealed class FakeFlyoutServices : IFlyoutServices
 {
     public DateTimeOffset Now => DateTimeOffset.UnixEpoch;
@@ -33,4 +33,8 @@ internal sealed class FakeFlyoutServices : IFlyoutServices
     public void RunUpdateAction()
     {
     }
+
+    public IReadOnlyList<string>? DeviceOrder { get; private set; }
+
+    public void SetDeviceOrder(IReadOnlyList<string> shown) => DeviceOrder = shown;
 }

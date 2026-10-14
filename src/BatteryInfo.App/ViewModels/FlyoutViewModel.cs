@@ -186,6 +186,22 @@ public sealed class FlyoutViewModel : ObservableObject
         UpdateUpdatedText();
     }
 
+    /// <summary>Moves a row to <paramref name="index"/> (dragged there) and saves the new order.</summary>
+    public void MoveDevice(DeviceViewModel device, int index)
+    {
+        var states = _snapshot.ToList();
+        var from = states.FindIndex(s => s.Latest.DeviceId == device.Id);
+        if (from < 0) return;
+        index = Math.Clamp(index, 0, states.Count - 1);
+        if (index == from) return;
+        var moved = states[from];
+        states.RemoveAt(from);
+        states.Insert(index, moved);
+        _snapshot = states;
+        Rebuild();
+        _services.SetDeviceOrder(states.Select(s => s.Latest.DeviceId).ToList());
+    }
+
     private async Task RefreshAsync()
     {
         IsRefreshing = true;
