@@ -23,6 +23,14 @@ public class LowBatteryPolicyTests
         return new DeviceState(reading, reading);
     }
 
+    // The HUAWEI provider's fallback when SPP fails: one approximate value from Windows, charge unknown.
+    private static DeviceState EarbudsOverHfp(int percent)
+    {
+        var reading = new DeviceReading("huawei:1", "HUAWEI", "HUAWEI FreeClip 2", DeviceKind.Earbuds, DeviceStatus.Online,
+            [BatteryComponent.Single(percent, ChargeState.Unknown)], DateTimeOffset.UnixEpoch, "HFP", Approximate: true);
+        return new DeviceState(reading, reading);
+    }
+
     [Fact]
     public void Fires_once_when_reaching_threshold()
     {
@@ -96,6 +104,25 @@ public class LowBatteryPolicyTests
     {
         var first = Assert.Single(_policy.Evaluate([Earbuds(left: 15, right: 40)]));
         Assert.Equal("Left", first.Component);
+
+        var second = Assert.Single(_policy.Evaluate([Earbuds(left: 14, right: 19)]));
+        Assert.Equal("Right", second.Component);
+    }
+
+    [Fact]
+    public void Hfp_fallback_does_not_alert_again_after_the_earbuds_alerted()
+    {
+        Assert.Equal(2, _policy.Evaluate([Earbuds(left: 15, right: 16)]).Count);
+
+        Assert.Empty(_policy.Evaluate([EarbudsOverHfp(19)]));
+    }
+
+    [Fact]
+    public void Hfp_fallback_does_not_use_up_an_earbud_alert()
+    {
+        var first = Assert.Single(_policy.Evaluate([Earbuds(left: 15, right: 40)]));
+        Assert.Equal("Left", first.Component);
+        Assert.Empty(_policy.Evaluate([EarbudsOverHfp(19)]));
 
         var second = Assert.Single(_policy.Evaluate([Earbuds(left: 14, right: 19)]));
         Assert.Equal("Right", second.Component);

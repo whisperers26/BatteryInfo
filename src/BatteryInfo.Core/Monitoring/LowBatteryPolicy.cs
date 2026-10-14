@@ -33,10 +33,15 @@ public sealed class LowBatteryPolicy
                     continue;
                 }
 
-                if (percent <= Threshold && alerted.Add(component.Name))
-                {
-                    alerts.Add(new LowBatteryAlert(reading.DeviceId, reading.Name, component.Name, percent));
-                }
+                if (percent > Threshold || alerted.Contains(component.Name)) continue;
+
+                // A device read one battery at a time (HUAWEI over SPP) can fall back to one whole-device value (HFP):
+                // once one of its batteries has alerted, that value is the same discharge, so it neither alerts nor
+                // takes the place of a battery that has not alerted yet.
+                if (IsWholeDevice(component) && alerted.Any(name => name.Length > 0)) continue;
+
+                alerted.Add(component.Name);
+                alerts.Add(new LowBatteryAlert(reading.DeviceId, reading.Name, component.Name, percent));
             }
         }
         return alerts;
@@ -51,6 +56,8 @@ public sealed class LowBatteryPolicy
         }
         return components;
     }
+
+    private static bool IsWholeDevice(BatteryComponent component) => component.Name.Length == 0;
 
     private static bool IsOnPower(ChargeState charge) =>
         charge is ChargeState.Charging or ChargeState.Full or ChargeState.NotCharging;
