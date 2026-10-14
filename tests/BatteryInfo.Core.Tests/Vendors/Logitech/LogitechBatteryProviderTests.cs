@@ -266,6 +266,24 @@ public class LogitechBatteryProviderTests
     }
 
     [Fact]
+    public async Task Cancellation_mid_poll_stops_before_the_next_step()
+    {
+        _receiver.Pair(1);
+        _receiver.Pair(2, new FakeHidppDevice { UnitId = 0x22222222 });
+        using var cancellation = new CancellationTokenSource();
+        _receiver.Noise = frame =>
+        {
+            if (frame[1] == 0x01 && frame[2] == 0x00 && frame[3] >> 4 == 1) cancellation.Cancel();
+            return [];
+        };
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => _provider.PollAsync(cancellation.Token));
+
+        Assert.DoesNotContain(_receiver.Requests, f => f[1] == 0x02 || f[2] == 0x83 && f[4] == 0x21);
+        Assert.Equal(1, _receiver.Requests.Count(f => f[1] == 0x01 && f[2] < 0x80));
+    }
+
+    [Fact]
     public async Task Battery_status_feature_is_used_when_unified_battery_is_absent()
     {
         var device = _receiver.Pair(1);
