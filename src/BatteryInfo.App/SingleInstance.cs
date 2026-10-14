@@ -28,10 +28,20 @@ internal sealed class SingleInstance : IDisposable
         return new SingleInstance(mutex, new EventWaitHandle(false, EventResetMode.AutoReset, $@"Local\{name}.ShowFlyout"));
     }
 
-    /// <summary>Asks the running instance to show its flyout, passing on this launch's right to come to the front.</summary>
+    /// <summary>Asks the running instance to show its flyout, passing on this launch's right to come to the front.
+    /// Does nothing when the running copy is elevated.</summary>
     public static void RequestShow(string name)
     {
-        if (!EventWaitHandle.TryOpenExisting($@"Local\{name}.ShowFlyout", out var request)) return;
+        EventWaitHandle? request;
+        try
+        {
+            if (!EventWaitHandle.TryOpenExisting($@"Local\{name}.ShowFlyout", out request)) return;
+        }
+        catch (UnauthorizedAccessException)
+        {
+            // An elevated copy's event lets this launch wait on it but not set it, so its flyout cannot be asked for.
+            return;
+        }
         NativeMethods.AllowSetForegroundWindow(NativeMethods.AsfwAny);
         using (request) request.Set();
     }
