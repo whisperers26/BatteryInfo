@@ -27,6 +27,7 @@ public sealed class FlyoutViewModel : ObservableObject
     private bool _startWithWindows;
     private bool _isOpen;
     private bool _autoUpdate;
+    private bool _settingsExpanded;
     private UpdateDescription _update = UpdateText.Describe(new UpdateStatus(UpdateState.Idle, null));
     private readonly RelayCommand _updateCommand;
 
@@ -39,6 +40,7 @@ public sealed class FlyoutViewModel : ObservableObject
         _autoUpdate = settings.AutoUpdate;
         _refreshCommand = new RelayCommand(() => _ = RefreshAsync(), () => !IsRefreshing);
         _updateCommand = new RelayCommand(services.RunUpdateAction, () => _update.ActionEnabled);
+        ToggleSettingsCommand = new RelayCommand(() => SettingsExpanded = !SettingsExpanded);
     }
 
     public ObservableCollection<DeviceViewModel> Devices { get; } = [];
@@ -88,6 +90,15 @@ public sealed class FlyoutViewModel : ObservableObject
         }
     }
 
+    /// <summary>Whether the settings under the gear button are shown. They fold away each time the flyout closes.</summary>
+    public bool SettingsExpanded
+    {
+        get => _settingsExpanded;
+        private set => SetProperty(ref _settingsExpanded, value);
+    }
+
+    public RelayCommand ToggleSettingsCommand { get; }
+
     public bool AutoUpdate
     {
         get => _autoUpdate;
@@ -132,6 +143,7 @@ public sealed class FlyoutViewModel : ObservableObject
         {
             if (_isOpen == value) return;
             _isOpen = value;
+            if (!value) SettingsExpanded = false;
             if (value && Devices.FirstOrDefault(d => d.IsExpanded) is { } expanded) LoadHistory(expanded, _services.Now);
         }
     }
