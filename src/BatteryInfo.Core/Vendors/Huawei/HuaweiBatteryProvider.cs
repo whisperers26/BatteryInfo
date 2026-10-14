@@ -40,6 +40,11 @@ public sealed class HuaweiBatteryProvider : IBatteryProvider
     private readonly Dictionary<ulong, bool> _lastConnected = [];
     private bool _disposed;
 
+    /// <summary>Reads the earbuds through Windows' Bluetooth stack.</summary>
+    public HuaweiBatteryProvider() : this(new WindowsHuaweiTransport())
+    {
+    }
+
     public HuaweiBatteryProvider(IHuaweiTransport transport, TimeProvider? time = null)
     {
         _transport = transport;
