@@ -23,7 +23,8 @@ public sealed class DeviceStore(TimeProvider time, TimeSpan retention)
         }
     }
 
-    /// <summary>Applies one complete poll of <paramref name="vendor"/>. That vendor's devices missing from it go Offline.</summary>
+    /// <summary>Applies one complete poll of <paramref name="vendor"/>. That vendor's devices missing from it go Offline,
+    /// or are dropped when they never had a battery value: such a row (a receiver that failed, say) has nothing to show.</summary>
     public void Apply(string vendor, IReadOnlyList<DeviceReading> readings)
     {
         lock (_gate)
@@ -40,7 +41,8 @@ public sealed class DeviceStore(TimeProvider time, TimeSpan retention)
             foreach (var (id, state) in _states.ToList())
             {
                 if (seen.Contains(id) || !IsVendor(state, vendor) || state.Latest.Status == DeviceStatus.Offline) continue;
-                _states[id] = state with { Latest = state.Latest with { Status = DeviceStatus.Offline, Detail = null } };
+                if (state.LastWithBattery is null) _states.Remove(id);
+                else _states[id] = state with { Latest = state.Latest with { Status = DeviceStatus.Offline, Detail = null } };
             }
         }
     }

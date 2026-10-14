@@ -1,5 +1,6 @@
 using BatteryInfo.Core.Hid;
 using BatteryInfo.Core.Model;
+using BatteryInfo.Core.Monitoring;
 using BatteryInfo.Core.Safety;
 using BatteryInfo.Core.Tests.Fakes;
 using BatteryInfo.Core.Vendors.Rog;
@@ -10,6 +11,7 @@ namespace BatteryInfo.Core.Tests.Vendors.Rog;
 public class RogBatteryProviderTests
 {
     private const string AzothXId = "rog:azoth-x:T4MPKRD01THC";
+    private const string MouseId = "rog:1ab0:T4MPKRD01THC";
 
     private readonly FakeHidBackend _backend = new();
     private readonly ManualTimeProvider _time = new();
@@ -375,6 +377,188 @@ public class RogBatteryProviderTests
         Assert.Empty(omni.Receiver.Device.Written);
     }
 
+    // --- A receiver that fails after a good scan reports the devices it listed, not itself ---
+
+    [Fact]
+    public async Task Scan_without_an_answer_after_a_good_poll_is_reported_on_the_listed_devices()
+    {
+        var omni = WithKeyboardAndMouse();
+        var provider = Provider();
+        await provider.PollAsync(CancellationToken.None);
+        omni.Receiver.Silent(RogProtocol.ScanForPairedDevices);
+
+        var readings = await provider.PollAsync(CancellationToken.None);
+
+        Assert.Equal([AzothXId, MouseId], readings.Select(r => r.DeviceId));
+        Assert.Equal(["ROG Azoth X", "ROG mouse"], readings.Select(r => r.Name));
+        Assert.Equal([DeviceKind.Keyboard, DeviceKind.Mouse], readings.Select(r => r.Kind));
+        Assert.All(readings, r =>
+        {
+            Assert.Equal(DeviceStatus.Error, r.Status);
+            Assert.Equal("Receiver did not answer", r.Detail);
+            Assert.Empty(r.Components);
+        });
+        Assert.Single(omni.KeyboardSlot.Device.Opens);
+        Assert.Single(omni.MouseSlot.Device.Opens);
+    }
+
+    [Fact]
+    public async Task Rejected_scan_after_a_good_poll_is_reported_on_the_listed_devices()
+    {
+        var omni = new FakeOmni(_backend);
+        var provider = Provider();
+        await provider.PollAsync(CancellationToken.None);
+        omni.Receiver.On(RogProtocol.ScanForPairedDevices, R(0x01, 0xFF, 0xAA));
+
+        var reading = Assert.Single(await provider.PollAsync(CancellationToken.None));
+
+        Assert.Equal(AzothXId, reading.DeviceId);
+        Assert.Equal(DeviceStatus.Error, reading.Status);
+        Assert.Equal("Receiver did not answer", reading.Detail);
+    }
+
+    [Fact]
+    public async Task Receiver_io_error_after_a_good_poll_is_reported_on_the_listed_devices()
+    {
+        var omni = new FakeOmni(_backend);
+        var provider = Provider();
+        await provider.PollAsync(CancellationToken.None);
+        omni.Receiver.Device.ReadError = new HidIoException("ReadFile failed", 87);
+
+        var reading = Assert.Single(await provider.PollAsync(CancellationToken.None));
+
+        Assert.Equal(AzothXId, reading.DeviceId);
+        Assert.Equal(DeviceStatus.Error, reading.Status);
+        Assert.Equal("Read failed (error 87)", reading.Detail);
+    }
+
+    [Fact]
+    public async Task Receiver_access_denied_after_a_good_poll_is_reported_on_the_listed_devices()
+    {
+        var omni = new FakeOmni(_backend);
+        var provider = Provider();
+        await provider.PollAsync(CancellationToken.None);
+        omni.Receiver.Device.OpenError = new HidIoException("Cannot open", HidIoException.AccessDenied);
+
+        var reading = Assert.Single(await provider.PollAsync(CancellationToken.None));
+
+        Assert.Equal(AzothXId, reading.DeviceId);
+        Assert.Equal(DeviceStatus.NeedsAccess, reading.Status);
+        Assert.Equal("Windows denied access to the receiver", reading.Detail);
+    }
+
+    [Fact]
+    public async Task Refused_scan_after_a_good_poll_is_reported_on_the_listed_devices()
+    {
+        _ = new FakeOmni(_backend);
+        var policy = new SwitchablePolicy();
+        var provider = new RogBatteryProvider(_backend, _time, policy);
+        await provider.PollAsync(CancellationToken.None);
+        policy.Refuse = true;
+
+        var reading = Assert.Single(await provider.PollAsync(CancellationToken.None));
+
+        Assert.Equal(AzothXId, reading.DeviceId);
+        Assert.Equal(DeviceStatus.Error, reading.Status);
+        Assert.Equal("Internal error: unsafe command refused", reading.Detail);
+    }
+
+    [Fact]
+    public async Task Scan_failure_reports_the_devices_of_the_latest_good_scan()
+    {
+        var omni = WithKeyboardAndMouse();
+        var provider = Provider();
+        await provider.PollAsync(CancellationToken.None);
+        omni.Receiver.On(RogProtocol.ScanForPairedDevices, ScanAzothX);
+        await provider.PollAsync(CancellationToken.None);
+        omni.Receiver.Silent(RogProtocol.ScanForPairedDevices);
+
+        var reading = Assert.Single(await provider.PollAsync(CancellationToken.None));
+
+        Assert.Equal(AzothXId, reading.DeviceId);
+    }
+
+    [Fact]
+    public async Task Scan_failure_after_a_scan_that_listed_nothing_is_reported_on_the_receiver()
+    {
+        var omni = new FakeOmni(_backend);
+        omni.Receiver.On(RogProtocol.ScanForPairedDevices, R(0x01, 0xA0, 0x00, 0x00, 0x00));
+        var provider = Provider();
+        await provider.PollAsync(CancellationToken.None);
+        omni.Receiver.Silent(RogProtocol.ScanForPairedDevices);
+
+        var reading = Assert.Single(await provider.PollAsync(CancellationToken.None));
+
+        Assert.Equal("rog:omni-receiver:T4MPKRD01THC", reading.DeviceId);
+        Assert.Equal(DeviceStatus.Error, reading.Status);
+    }
+
+    [Fact]
+    public async Task Scan_failure_reports_only_the_devices_of_the_receiver_that_failed()
+    {
+        _ = new FakeOmni(_backend);
+        var other = new FakeOmni(_backend, serial: "R2", pid: 0x1ACF);
+        var provider = Provider();
+        await provider.PollAsync(CancellationToken.None);
+        other.Receiver.Silent(RogProtocol.ScanForPairedDevices);
+
+        var readings = await provider.PollAsync(CancellationToken.None);
+
+        Assert.Equal([AzothXId, "rog:azoth-x:R2"], readings.Select(r => r.DeviceId));
+        Assert.Equal([DeviceStatus.Online, DeviceStatus.Error], readings.Select(r => r.Status));
+    }
+
+    [Fact]
+    public async Task Failed_scan_between_good_polls_keeps_the_keyboard_and_adds_no_receiver_row()
+    {
+        var omni = new FakeOmni(_backend);
+        var provider = Provider();
+        var store = new DeviceStore(_time);
+        store.Apply("ROG", await provider.PollAsync(CancellationToken.None));
+        omni.Receiver.Silent(RogProtocol.ScanForPairedDevices);
+        _time.Advance(TimeSpan.FromMinutes(2));
+
+        store.Apply("ROG", await provider.PollAsync(CancellationToken.None));
+
+        var failed = Assert.Single(store.Snapshot());
+        Assert.Equal(AzothXId, failed.Latest.DeviceId);
+        Assert.Equal(DeviceStatus.Error, failed.Latest.Status);
+        Assert.Equal(45, failed.DisplayComponents[0].Percent);
+
+        omni.Receiver.On(RogProtocol.ScanForPairedDevices, ScanAzothX);
+        _time.Advance(TimeSpan.FromMinutes(2));
+        store.Apply("ROG", await provider.PollAsync(CancellationToken.None));
+
+        Assert.Equal(DeviceStatus.Online, Assert.Single(store.Snapshot()).Latest.Status);
+    }
+
+    [Fact]
+    public async Task Receiver_row_from_a_failed_first_scan_is_gone_after_the_next_good_poll()
+    {
+        var omni = new FakeOmni(_backend);
+        omni.Receiver.Silent(RogProtocol.ScanForPairedDevices);
+        var provider = Provider();
+        var store = new DeviceStore(_time);
+        store.Apply("ROG", await provider.PollAsync(CancellationToken.None));
+        omni.Receiver.On(RogProtocol.ScanForPairedDevices, ScanAzothX);
+        _time.Advance(TimeSpan.FromMinutes(2));
+
+        store.Apply("ROG", await provider.PollAsync(CancellationToken.None));
+
+        Assert.Equal([AzothXId], store.Snapshot().Select(s => s.Latest.DeviceId));
+    }
+
+    [Fact]
+    public async Task Receiver_unplugged_after_a_good_poll_gives_no_readings()
+    {
+        var omni = new FakeOmni(_backend);
+        var provider = Provider();
+        await provider.PollAsync(CancellationToken.None);
+        omni.Receiver.Device.ReadError = new HidIoException("ReadFile failed", 1167);
+
+        Assert.Empty(await provider.PollAsync(CancellationToken.None));
+    }
+
     [Fact]
     public async Task Cancelled_poll_throws_and_sends_nothing()
     {
@@ -662,6 +846,16 @@ public class RogBatteryProviderTests
 
     // --- Helpers ---
 
+    private FakeOmni WithKeyboardAndMouse()
+    {
+        var omni = new FakeOmni(_backend);
+        omni.Receiver.On(RogProtocol.ScanForPairedDevices,
+            R(0x01, 0xA0, 0x00, 0x02, 0x00, 0x25, 0x1C, 0x02, 0x04, 0xB0, 0x1A, 0x03, 0x05));
+        omni.MouseSlot.On(RogProtocol.MouseExistInfo, R(0x03, 0x12, 0x00, 0x02, 0x00, 0x01))
+            .On(RogProtocol.MousePowerInfo, MousePower(0x03, 80, charging: 1));
+        return omni;
+    }
+
     private FakeOmni WithMouseSlot()
     {
         var omni = new FakeOmni(_backend);
@@ -687,5 +881,14 @@ public class RogBatteryProviderTests
 
         public bool IsAllowed(HidDeviceInfo device, ReadOnlySpan<byte> outgoing) =>
             !(outgoing[1] == 0x12 && outgoing[2] == 0x01) && _inner.IsAllowed(device, outgoing);
+    }
+
+    private sealed class SwitchablePolicy : ICommandPolicy
+    {
+        private readonly RogCommandPolicy _inner = new();
+
+        public bool Refuse { get; set; }
+
+        public bool IsAllowed(HidDeviceInfo device, ReadOnlySpan<byte> outgoing) => !Refuse && _inner.IsAllowed(device, outgoing);
     }
 }

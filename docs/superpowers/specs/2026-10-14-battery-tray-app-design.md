@@ -122,7 +122,8 @@ public interface IBatteryProvider : IDisposable
   never affects the others. It publishes snapshots through `SnapshotChanged`.
 - `DeviceStore` merges readings into per-device state:
   - keeps the latest reading and the latest reading that had a battery value;
-  - a device missing from its vendor's latest poll becomes `Offline` (last value kept);
+  - a device missing from its vendor's latest poll becomes `Offline` (last value kept); one that
+    never had a battery value (such as a receiver's error row) is dropped instead;
   - an `Asleep`/`Error` reading without components keeps showing the last value as stale;
   - devices not seen for 7 days are dropped from the view.
 - `LowBatteryPolicy` (pure): fires once when a component is at or below the threshold
@@ -163,6 +164,9 @@ Logitech `0x80`/`0x82` register writes, Razer SET ids, Huawei non-battery comman
 
 Each provider follows its protocol file. Summary of behaviour the app depends on:
 
+- When a receiver fails (no answer, I/O error, access denied), the devices it last listed carry the
+  failure's status and detail, so they are not shown as not connected. The receiver is reported as
+  a row of its own only while no device on it is known (such as on the first poll after start-up).
 - **Logitech**: group the receiver's FF00 U1 (7-byte) and U2 (20-byte) collections by parent;
   read receiver register B5 for slots and names; ping each slot; resolve feature indexes with
   IRoot (cached per device per connection); read 0x1004 (else 0x1000/0x1001/0x1F20). Ping error
