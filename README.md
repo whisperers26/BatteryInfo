@@ -34,6 +34,8 @@ This publishes the app to `%LOCALAPPDATA%\Programs\BatteryInfo` and starts it in
   Hovering shows every device's level in the tooltip.
 - Each row shows the level and whether the device is charging, asleep (with its last known level) or
   not connected. Earbuds show left, right and case. Click a row for its last 7 days.
+- While another app holds the HUAWEI earbuds' battery channel, their row shows Windows' approximate value
+  (marked ≈). Their 7-day chart shows only the left, right and case values, so it has a gap for that time.
 - The footer sets the low-battery alert level (10-30 %) and turns the alerts on or off. An alert fires once
   per discharge, when a device that is not charging reaches the level.
 - Settings, history (kept 90 days) and logs are in `%LOCALAPPDATA%\BatteryInfo`.

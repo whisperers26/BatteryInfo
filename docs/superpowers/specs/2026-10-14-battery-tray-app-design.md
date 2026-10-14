@@ -215,9 +215,10 @@ Everything lives under `%LOCALAPPDATA%\BatteryInfo\`:
 - `settings.json`: poll interval (120 s), low-battery threshold (20 %), notifications on/off,
   frame tracing on/off.
 - `history\yyyy-MM.jsonl`: one line per device component per change (or every 30 min when
-  unchanged): timestamp, device id, name, component, percent, charge state, status. Files older
+  unchanged): timestamp, device id, name, component, percent, charge state, status, approximate. Files older
   than 90 days are deleted. On start-up the last line per device seeds the store, so recently
-  seen devices show as Offline with their last value.
+  seen devices show as Offline with their last value. Earbuds read both per bud and through
+  Windows' single HFP value are seeded from whichever of the two was written last.
 - `logs\batteryinfo-yyyyMMdd.log`: errors and state changes; HID/SPP frames only when tracing is
   on. Logs older than 7 days are deleted.
 

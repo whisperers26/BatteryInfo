@@ -100,23 +100,37 @@ public sealed class HistoryStore(string directory, TimeProvider time)
             var reading = state.Latest;
             if (reading.Status == DeviceStatus.Offline || !reading.HasBattery) continue;
 
+            var switchedSet = SwitchesSet(reading, lastWritten);
             foreach (var component in reading.Components)
             {
                 if (component.Percent is null) continue;
                 var record = new HistoryRecord(reading.Timestamp, reading.DeviceId, reading.Name, reading.Vendor,
-                    reading.Kind, component.Name, component.Percent, component.Charge, reading.Status);
+                    reading.Kind, component.Name, component.Percent, component.Charge, reading.Status, reading.Approximate);
                 var key = Key(record);
-                if (lastWritten.TryGetValue(key, out var previous) && !ShouldWrite(previous, record)) continue;
+                if (lastWritten.TryGetValue(key, out var previous) && !ShouldWrite(previous, record, switchedSet)) continue;
                 lastWritten[key] = record;
                 toWrite.Add(record);
             }
         }
     }
 
-    private static bool ShouldWrite(HistoryRecord previous, HistoryRecord record) =>
+    // A switch between a single value and named ones writes every value at once, so the set now read is always the
+    // newest in the history (see NewestSet); unchanged values would otherwise wait for the heartbeat.
+    private static bool ShouldWrite(HistoryRecord previous, HistoryRecord record, bool switchedSet) =>
         record.Time > previous.Time &&
-        (record.Percent != previous.Percent || record.Charge != previous.Charge || record.Status != previous.Status ||
+        (switchedSet || record.Percent != previous.Percent || record.Charge != previous.Charge ||
+         record.Status != previous.Status || record.Approximate != previous.Approximate ||
          record.Time - previous.Time >= Heartbeat);
+
+    private static bool SwitchesSet(DeviceReading reading, Dictionary<string, HistoryRecord> lastWritten)
+    {
+        var newest = lastWritten.Values
+            .Where(r => string.Equals(r.DeviceId, reading.DeviceId, StringComparison.OrdinalIgnoreCase))
+            .MaxBy(r => r.Time);
+        if (newest is null) return false;
+        var readingIsSingle = reading.Components.Where(c => c.Percent is not null).All(c => IsSingle(c.Name));
+        return IsSingle(newest.Component) != readingIsSingle;
+    }
 
     private static string Key(HistoryRecord record) => $"{record.DeviceId}\n{record.Component}";
 
@@ -130,11 +144,26 @@ public sealed class HistoryStore(string directory, TimeProvider time)
 
     private static DeviceReading ToReading(IEnumerable<HistoryRecord> componentRecords)
     {
-        var records = componentRecords.OrderBy(r => ComponentOrder.Rank(r.Component)).ThenBy(r => r.Component).ToList();
+        var records = NewestSet(componentRecords.ToList())
+            .OrderBy(r => ComponentOrder.Rank(r.Component)).ThenBy(r => r.Component).ToList();
         var newest = records.MaxBy(r => r.Time)!;
         return new DeviceReading(newest.DeviceId, newest.Vendor, newest.DeviceName, newest.Kind, DeviceStatus.Offline,
-            records.Select(r => new BatteryComponent(r.Component, r.Percent, r.Charge)).ToList(), newest.Time, "History");
+            records.Select(r => new BatteryComponent(r.Component, r.Percent, r.Charge)).ToList(), newest.Time, "History",
+            newest.Approximate);
     }
+
+    // A device can have both a single value and named ones in its history: HUAWEI earbuds are read per bud over SPP,
+    // and fall back to Windows' one value while another app holds SPP. Only the set written last describes the
+    // device; named values win a tie.
+    private static IReadOnlyList<HistoryRecord> NewestSet(IReadOnlyList<HistoryRecord> componentRecords)
+    {
+        var single = componentRecords.Where(r => IsSingle(r.Component)).ToList();
+        var named = componentRecords.Where(r => !IsSingle(r.Component)).ToList();
+        if (single.Count == 0 || named.Count == 0) return componentRecords;
+        return single.Max(r => r.Time) > named.Max(r => r.Time) ? single : named;
+    }
+
+    private static bool IsSingle(string component) => component.Length == 0;
 
     private void Write(List<HistoryRecord> records)
     {

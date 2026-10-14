@@ -5,6 +5,8 @@ namespace BatteryInfo.Core.History;
 /// <summary>One line of the battery history: one component of one device at one moment.</summary>
 /// <param name="Time">When the value was read (the reading's timestamp).</param>
 /// <param name="Component">"" for a single-battery device, otherwise "Left", "Right" or "Case".</param>
+/// <param name="Approximate">The reading was marked approximate (e.g. Windows' HFP value for earbuds). Lines written
+/// before this field existed read as false.</param>
 public sealed record HistoryRecord(
     DateTimeOffset Time,
     string DeviceId,
@@ -14,4 +16,5 @@ public sealed record HistoryRecord(
     string Component,
     int? Percent,
     ChargeState Charge,
-    DeviceStatus Status);
+    DeviceStatus Status,
+    bool Approximate = false);

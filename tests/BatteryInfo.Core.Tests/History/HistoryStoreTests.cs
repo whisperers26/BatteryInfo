@@ -18,10 +18,11 @@ public sealed class HistoryStoreTests : IDisposable
     private HistoryStore NewStore() => new(_directory, _time);
 
     private DeviceState Mouse(int? percent, ChargeState charge = ChargeState.Discharging,
-        DeviceStatus status = DeviceStatus.Online, DateTimeOffset? at = null)
+        DeviceStatus status = DeviceStatus.Online, DateTimeOffset? at = null, bool approximate = false)
     {
         var reading = new DeviceReading("logitech:B4655832", "Logitech", "PRO X2 SUPERSTRIKE", DeviceKind.Mouse, status,
-            percent is null ? [] : [BatteryComponent.Single(percent, charge)], at ?? _time.GetUtcNow(), "HID++ 0x1004");
+            percent is null ? [] : [BatteryComponent.Single(percent, charge)], at ?? _time.GetUtcNow(), "HID++ 0x1004",
+            approximate);
         return new DeviceState(reading, reading.HasBattery ? reading : null);
     }
 
@@ -35,6 +36,15 @@ public sealed class HistoryStoreTests : IDisposable
                 new BatteryComponent("Case", caseLevel, ChargeState.Charging),
             ],
             at ?? _time.GetUtcNow(), "SPP");
+        return new DeviceState(reading, reading);
+    }
+
+    // The HUAWEI provider's fallback while another app holds the SPP channel: Windows' one approximate value.
+    private DeviceState EarbudsFromWindows(int percent, DateTimeOffset? at = null)
+    {
+        var reading = new DeviceReading("huawei:C0DA5EA83EC7", "HUAWEI", "HUAWEI FreeClip 2", DeviceKind.Earbuds,
+            DeviceStatus.Online, [BatteryComponent.Single(percent, ChargeState.Unknown)], at ?? _time.GetUtcNow(),
+            "HFP (approx.)", Approximate: true);
         return new DeviceState(reading, reading);
     }
 
@@ -117,6 +127,40 @@ public sealed class HistoryStoreTests : IDisposable
 
         Assert.Equal([56, 55, 55], AllMouse(store).Select(r => r.Percent!.Value));
         Assert.Equal(ChargeState.Charging, AllMouse(store)[2].Charge);
+    }
+
+    [Fact]
+    public void An_approximate_value_is_recorded_as_approximate()
+    {
+        NewStore().Append([Mouse(56, approximate: true)]);
+
+        Assert.True(Assert.Single(AllMouse(NewStore())).Approximate);
+    }
+
+    [Fact]
+    public void A_switch_between_an_exact_and_an_approximate_value_is_written_at_once()
+    {
+        var store = NewStore();
+
+        store.Append([Mouse(56)]);
+        _time.Advance(TimeSpan.FromMinutes(2));
+        store.Append([Mouse(56, approximate: true)]);
+
+        Assert.Equal([false, true], AllMouse(store).Select(r => r.Approximate));
+    }
+
+    [Fact]
+    public void Lines_written_without_the_approximate_flag_read_as_exact()
+    {
+        Directory.CreateDirectory(_directory);
+        File.WriteAllText(Path.Combine(_directory, "2026-10.jsonl"),
+            "{\"time\":\"2026-10-14T12:00:00+00:00\",\"deviceId\":\"logitech:B4655832\",\"deviceName\":\"PRO X2 SUPERSTRIKE\"," +
+            "\"vendor\":\"Logitech\",\"kind\":\"Mouse\",\"component\":\"\",\"percent\":56,\"charge\":\"Discharging\",\"status\":\"Online\"}\n");
+
+        var record = Assert.Single(AllMouse(NewStore()));
+
+        Assert.Equal(56, record.Percent);
+        Assert.False(record.Approximate);
     }
 
     [Fact]
@@ -248,6 +292,90 @@ public sealed class HistoryStoreTests : IDisposable
         var mouse = readings[1];
         Assert.Equal(BatteryComponent.Single(59, ChargeState.Discharging), Assert.Single(mouse.Components));
         Assert.Equal(newest, mouse.Timestamp);
+    }
+
+    [Fact]
+    public void LastKnownReadings_keeps_the_approximate_mark_of_the_newest_value()
+    {
+        var store = NewStore();
+        store.Append([Mouse(60)]);
+        _time.Advance(TimeSpan.FromMinutes(2));
+        store.Append([Mouse(59, approximate: true)]);
+
+        var reading = Assert.Single(NewStore().LastKnownReadings());
+
+        Assert.True(reading.Approximate);
+        Assert.Equal(59, Assert.Single(reading.Components).Percent);
+    }
+
+    [Fact]
+    public void LastKnownReadings_of_earbuds_last_read_through_Windows_has_only_that_value()
+    {
+        var store = NewStore();
+        store.Append([Earbuds(70, 72, 50)]);
+        _time.Advance(TimeSpan.FromMinutes(2));
+        store.Append([EarbudsFromWindows(75)]);
+        var fallback = _time.GetUtcNow();
+
+        var reading = Assert.Single(NewStore().LastKnownReadings());
+
+        Assert.Equal(BatteryComponent.Single(75, ChargeState.Unknown), Assert.Single(reading.Components));
+        Assert.True(reading.Approximate);
+        Assert.Equal(fallback, reading.Timestamp);
+    }
+
+    [Fact]
+    public void LastKnownReadings_of_earbuds_read_per_bud_after_a_Windows_value_has_only_the_bud_values()
+    {
+        var store = NewStore();
+        store.Append([EarbudsFromWindows(75)]);
+        _time.Advance(TimeSpan.FromMinutes(2));
+        store.Append([Earbuds(70, 72, 50)]);
+        var perBud = _time.GetUtcNow();
+
+        var reading = Assert.Single(NewStore().LastKnownReadings());
+
+        Assert.Equal(["Left", "Right", "Case"], reading.Components.Select(c => c.Name));
+        Assert.Equal([70, 72, 50], reading.Components.Select(c => c.Percent!.Value));
+        Assert.False(reading.Approximate);
+        Assert.Equal(perBud, reading.Timestamp);
+    }
+
+    [Fact]
+    public void Unchanged_bud_values_after_a_short_Windows_fallback_are_written_again_at_once()
+    {
+        var store = NewStore();
+        store.Append([Earbuds(70, 72, 50)]);
+        _time.Advance(TimeSpan.FromMinutes(2));
+        store.Append([EarbudsFromWindows(75)]);
+        _time.Advance(TimeSpan.FromMinutes(2));
+        store.Append([Earbuds(70, 72, 50)]);
+        var back = _time.GetUtcNow();
+
+        var reading = Assert.Single(NewStore().LastKnownReadings());
+
+        Assert.Equal(["Left", "Right", "Case"], reading.Components.Select(c => c.Name));
+        Assert.False(reading.Approximate);
+        Assert.Equal(back, reading.Timestamp);
+        Assert.Equal(7, store.Query("huawei:C0DA5EA83EC7", DateTimeOffset.MinValue).Count);
+    }
+
+    [Fact]
+    public void An_unchanged_Windows_value_after_a_short_per_bud_read_is_written_again_at_once()
+    {
+        var store = NewStore();
+        store.Append([EarbudsFromWindows(75)]);
+        _time.Advance(TimeSpan.FromMinutes(2));
+        store.Append([Earbuds(70, 72, 50)]);
+        _time.Advance(TimeSpan.FromMinutes(2));
+        store.Append([EarbudsFromWindows(75)]);
+        var back = _time.GetUtcNow();
+
+        var reading = Assert.Single(NewStore().LastKnownReadings());
+
+        Assert.Equal(BatteryComponent.Single(75, ChargeState.Unknown), Assert.Single(reading.Components));
+        Assert.True(reading.Approximate);
+        Assert.Equal(back, reading.Timestamp);
     }
 
     [Fact]
