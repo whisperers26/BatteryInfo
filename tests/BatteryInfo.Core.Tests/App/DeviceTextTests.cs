@@ -18,6 +18,12 @@ public class DeviceTextTests
         new("huawei:C0DA5EA83EC7", "HUAWEI", "HUAWEI FreeClip 2", DeviceKind.Earbuds, status,
             [new("Left", 76, left), new("Right", 75, right), new("Case", 100, @case)], at ?? Now, "SPP");
 
+    /// <summary>Earbuds whose battery channel was busy, so the value is Windows' own HFP level.</summary>
+    private static DeviceReading WindowsEarbuds(int percent) =>
+        new("huawei:C0DA5EA83EC7", "HUAWEI", "HUAWEI FreeClip 2", DeviceKind.Earbuds, DeviceStatus.Online,
+            [BatteryComponent.Single(percent, ChargeState.Unknown)], Now, DeviceReading.WindowsHfpSource, Approximate: true,
+            Detail: "SPP busy; approximate value from Windows");
+
     private static DeviceState Fresh(DeviceReading reading) => new(reading, reading.HasBattery ? reading : null);
 
     [Theory]
@@ -46,10 +52,34 @@ public class DeviceTextTests
     }
 
     [Fact]
-    public void Approximate_values_say_where_they_came_from()
+    public void Approximate_values_from_windows_say_so()
     {
-        Assert.Equal("Approx. from Windows",
-            DeviceText.StatusLine(Fresh(Mouse(DeviceStatus.Online, 80, ChargeState.Unknown, approximate: true, detail: "SPP busy")), Now));
+        Assert.Equal("Approx. from Windows", DeviceText.StatusLine(Fresh(WindowsEarbuds(80)), Now));
+    }
+
+    [Fact]
+    public void Approximate_values_read_from_the_device_are_estimated()
+    {
+        var fromVoltage = Mouse(DeviceStatus.Online, 81, approximate: true) with { Source = "HID++ 0x1001" };
+
+        Assert.Equal("Estimated", DeviceText.StatusLine(Fresh(fromVoltage), Now));
+        Assert.Equal("Estimated · Charging",
+            DeviceText.StatusLine(Fresh(Mouse(DeviceStatus.Online, 50, ChargeState.Charging, approximate: true)), Now));
+    }
+
+    [Fact]
+    public void Approximate_note_warns_that_windows_values_run_high()
+    {
+        Assert.Equal("Windows' own value, which can be about 5 points high", DeviceText.ApproximateNote(WindowsEarbuds(80)));
+        Assert.Null(DeviceText.ApproximateNote(Mouse(DeviceStatus.Online, 56)));
+    }
+
+    [Fact]
+    public void Approximate_note_does_not_blame_windows_for_a_device_estimate()
+    {
+        var fromVoltage = Mouse(DeviceStatus.Online, 81, approximate: true) with { Source = "HID++ 0x1001" };
+
+        Assert.Equal("Estimated from the battery voltage or level", DeviceText.ApproximateNote(fromVoltage));
     }
 
     [Fact]

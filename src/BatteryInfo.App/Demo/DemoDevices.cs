@@ -11,7 +11,7 @@ internal static class DemoDevices
 
     public static readonly DeviceReading FreeClip = Template("huawei:A1B2C3D4E5F6", "HUAWEI", "HUAWEI FreeClip 2", DeviceKind.Earbuds, "SPP");
 
-    public static readonly DeviceReading FreeBuds = Template("huawei:A1B2C3D4E5F7", "HUAWEI", "HUAWEI FreeBuds 6i", DeviceKind.Earbuds, "HFP (approx.)") with
+    public static readonly DeviceReading FreeBuds = Template("huawei:A1B2C3D4E5F7", "HUAWEI", "HUAWEI FreeBuds 6i", DeviceKind.Earbuds, DeviceReading.WindowsHfpSource) with
     {
         Approximate = true,
         Detail = "The battery channel is busy, so this is Windows' own value",

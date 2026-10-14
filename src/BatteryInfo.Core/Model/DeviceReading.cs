@@ -17,6 +17,10 @@ public sealed record DeviceReading(
     bool Approximate = false,
     string? Detail = null)
 {
+    /// <summary>The <see cref="Source"/> of a value that is Windows' own HFP battery level rather than one read from the
+    /// device: coarse, and often a few points high.</summary>
+    public const string WindowsHfpSource = "HFP (approx.)";
+
     public bool HasBattery => Components.Any(c => c.Percent is not null);
 
     public int? LowestPercent => Components.Where(c => c.Percent is not null).Min(c => c.Percent);
