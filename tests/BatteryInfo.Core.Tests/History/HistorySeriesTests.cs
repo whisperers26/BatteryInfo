@@ -57,6 +57,30 @@ public class HistorySeriesTests
     }
 
     [Fact]
+    public void Build_leaves_out_the_single_value_of_a_device_that_also_has_named_components()
+    {
+        // HUAWEI earbuds read per bud, then once through Windows' HFP value while another app held SPP.
+        var series = HistorySeries.Build(
+        [
+            Record(0, "Left", 70), Record(0, "Right", 72), Record(0, "Case", 50),
+            Record(2, "", 75, ChargeState.Unknown),
+            Record(4, "Left", 69),
+        ], TimeSpan.FromMinutes(45));
+
+        Assert.Equal(["Left", "Right", "Case"], series.Select(s => s.Component));
+        Assert.Equal([70, 69], Assert.Single(series[0].Segments).Select(p => p.Percent));
+    }
+
+    [Fact]
+    public void Build_keeps_the_single_value_when_no_named_component_has_a_percent()
+    {
+        var series = HistorySeries.Build([Record(0, "", 75, ChargeState.Unknown), Record(2, "Left", null)],
+            TimeSpan.FromMinutes(45));
+
+        Assert.Equal([75], Assert.Single(Assert.Single(series).Segments).Select(p => p.Percent));
+    }
+
+    [Fact]
     public void Build_of_nothing_is_empty()
     {
         Assert.Empty(HistorySeries.Build([], TimeSpan.FromMinutes(45)));
