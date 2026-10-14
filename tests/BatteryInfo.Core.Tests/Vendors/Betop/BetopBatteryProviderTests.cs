@@ -219,6 +219,64 @@ public class BetopBatteryProviderTests
     public void No_devices_no_readings() => Assert.Empty(Poll(Provider()));
 
     [Fact]
+    public void Asleep_dongle_20DD_is_reported_asleep_without_being_opened()
+    {
+        // 20DD:518D exposes a vendor collection identical to the 20BC one; only the VID tells them apart.
+        var asleep = _fake.Add(0x20DD, 0x518D, 0x00FF, 0x0003, 64, 64, mi: 1, outputReportId: 0x02);
+        var backend = new TrackingHidBackend(_fake);
+
+        var reading = Assert.Single(Poll(Provider(backend)));
+
+        Assert.Equal("betop:KP70C2", reading.DeviceId);
+        Assert.Equal("Betop KP70C2", reading.Name);
+        Assert.Equal(DeviceKind.Controller, reading.Kind);
+        Assert.Equal(DeviceStatus.Asleep, reading.Status);
+        Assert.Empty(reading.Components);
+        Assert.Equal(_time.GetUtcNow(), reading.Timestamp);
+        Assert.Equal("Controller asleep or off", reading.Detail);
+        Assert.Empty(asleep.Opens);
+        Assert.Equal(0, asleep.SentCount);
+        // Rejected by the enumeration filter, so the backend does not even open it with zero access for its caps.
+        Assert.Contains((0x20DD, 0x518D, false), backend.FilterCalls.Select(c => ((int)c.VendorId, (int)c.ProductId, c.Accepted)));
+    }
+
+    [Fact]
+    public void Asleep_dongle_is_not_opened_even_when_the_backend_ignores_the_filter()
+    {
+        var asleep = _fake.Add(0x20DD, 0x518D, 0x00FF, 0x0003, 64, 64, mi: 1, outputReportId: 0x02);
+
+        var reading = Assert.Single(Poll(Provider(new TrackingHidBackend(_fake, ignoreFilter: true))));
+
+        Assert.Equal(DeviceStatus.Asleep, reading.Status);
+        Assert.Empty(asleep.Opens);
+    }
+
+    [Fact]
+    public void A_20BC_path_of_the_same_model_wins_over_the_asleep_dongle()
+    {
+        var asleep = _fake.Add(0x20DD, 0x518D, 0x00FF, 0x0003, 64, 64, mi: 1);
+        var wired = _fake.Add(0x20BC, 0x518C, 0x00FF, 0x0003, 64, 64, mi: 1);
+        ReplyWith(wired, Reply91);
+
+        var reading = Assert.Single(Poll(Provider()));
+
+        Assert.Equal(DeviceStatus.Online, reading.Status);
+        Assert.Empty(asleep.Opens);
+    }
+
+    [Fact]
+    public void Other_20DD_devices_are_ignored_and_never_opened()
+    {
+        // BetopGame registers 20DD:<wired PID> of KP50C and others as a normal device; we never write to 20DD at all.
+        var kp50c = _fake.Add(0x20DD, 0x5149, 0x00FF, 0x0003, 64, 64, mi: 1);
+
+        Assert.Empty(Poll(Provider(new TrackingHidBackend(_fake, ignoreFilter: true))));
+        Assert.Empty(Poll(Provider()));
+
+        Assert.Empty(kp50c.Opens);
+    }
+
+    [Fact]
     public void Connections_are_closed_before_the_poll_returns()
     {
         var (vendor, _) = AddDongle();

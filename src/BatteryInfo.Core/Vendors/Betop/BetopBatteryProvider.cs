@@ -58,10 +58,27 @@ public sealed class BetopBatteryProvider : IBatteryProvider
     {
         cancellationToken.ThrowIfCancellationRequested();
 
-        var byModel = new Dictionary<BetopModel, List<HidDeviceInfo>>();
-        foreach (var device in _hid.Enumerate(IsOnlineModel))
+        // The backend opens (zero access, for caps) only what the filter accepts. The KP70C2 dongle in its asleep
+        // identity 20DD:518D is noted and rejected right here, so it is never opened at all.
+        var asleep = new HashSet<BetopModel>();
+        var present = _hid.Enumerate((vendorId, productId) =>
         {
+            if (BetopModels.FindAsleepDongle(vendorId, productId) is not { } sleeping) return IsOnlineModel(vendorId, productId);
+            asleep.Add(sleeping);
+            return false;
+        });
+
+        var byModel = new Dictionary<BetopModel, List<HidDeviceInfo>>();
+        foreach (var device in present)
+        {
+            // Checked again on the result, so a backend that ignored the filter still never gets 20DD opened.
+            if (BetopModels.FindAsleepDongle(device.VendorId, device.ProductId) is { } sleeping)
+            {
+                asleep.Add(sleeping);
+                continue;
+            }
             if (device.VendorId != BetopModels.OnlineVendorId || BetopModels.FindByProductId(device.ProductId) is not { } model) continue;
+
             if (!byModel.TryGetValue(model, out var collections)) byModel[model] = collections = [];
             collections.Add(device);
         }
@@ -72,6 +89,10 @@ public sealed class BetopBatteryProvider : IBatteryProvider
             cancellationToken.ThrowIfCancellationRequested();
             readings.Add(ReadModel(model, collections, cancellationToken));
         }
+
+        // Pad asleep or off: the dongle dropped 20BC entirely. Reported from presence alone, with zero I/O.
+        foreach (var model in asleep.Where(m => !byModel.ContainsKey(m)).OrderBy(m => m.Name, StringComparer.Ordinal))
+            readings.Add(Reading(model, DeviceStatus.Asleep, [], "Controller asleep or off"));
         return readings;
     }
 
@@ -99,6 +120,11 @@ public sealed class BetopBatteryProvider : IBatteryProvider
 
     private DeviceReading ReadCollection(BetopModel model, HidDeviceInfo device, CancellationToken cancellationToken)
     {
+        // The safety gate: 20DD:518D has a vendor collection identical to 20BC's, so only the VID tells the asleep
+        // (and firmware-update) dongle apart. Nothing but 20BC is ever opened for writing.
+        if (device.VendorId != BetopModels.OnlineVendorId)
+            throw new UnsafeCommandException($"Refused to open {device.Label} for writing: only VID 20BC may be written to");
+
         using var connection = new GuardedHidConnection(_hid.Open(device, HidAccess.ReadWrite), _policy);
         for (var attempt = 0; attempt < Attempts; attempt++)
         {
