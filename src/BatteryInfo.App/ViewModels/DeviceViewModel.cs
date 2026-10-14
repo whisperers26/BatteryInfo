@@ -72,6 +72,9 @@ public sealed class DeviceViewModel : ObservableObject
 
     public ObservableCollection<ComponentViewModel> Components { get; } = [];
 
+    /// <summary>Earbuds and the like: the values get a line of their own under the name.</summary>
+    public bool IsMultiComponent => Components.Count > 1;
+
     public IReadOnlyList<HistorySeries> History
     {
         get => _history;
@@ -118,6 +121,7 @@ public sealed class DeviceViewModel : ObservableObject
         {
             Components.Clear();
             foreach (var component in components) Components.Add(new ComponentViewModel(component.Name));
+            OnPropertyChanged(nameof(IsMultiComponent));
         }
         for (var i = 0; i < components.Count; i++)
         {
