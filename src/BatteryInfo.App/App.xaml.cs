@@ -119,7 +119,10 @@ public partial class App : Application, IFlyoutServices
             startWithWindows.Toggle();
             _flyoutViewModel?.ReloadStartWithWindows();
         };
-        _notifier = new LowBatteryNotifier(_tray.ShowWarning)
+        // The demo keeps no alerts across runs: its mouse is always low, and a kept alert would hide the toast the
+        // demo is meant to show.
+        var alertStore = _options.Demo ? null : new LowBatteryAlertStore(Path.Combine(root, "low-battery-alerts.json"));
+        _notifier = new LowBatteryNotifier(_tray.ShowWarning, alertStore)
         {
             Threshold = _settings.LowBatteryThreshold,
             Enabled = _settings.NotificationsEnabled,

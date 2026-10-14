@@ -9,11 +9,31 @@ public sealed class LowBatteryPolicy
 {
     private const int RearmMargin = 5;
     private const string WholeDevice = "";
+    private const char KeySeparator = '|';
 
     // Device id -> names of its components that have alerted in the current discharge.
     private readonly Dictionary<string, HashSet<string>> _alerted = new(StringComparer.OrdinalIgnoreCase);
 
     public int Threshold { get; set; } = 20;
+
+    /// <summary>A copy of the components alerted and not re-armed since, as "&lt;DeviceId&gt;|&lt;component&gt;"
+    /// keys. Save it whenever it changes, and hand it to <see cref="Restore"/> after a restart.</summary>
+    public IReadOnlySet<string> Alerted =>
+        _alerted.SelectMany(device => device.Value.Select(component => $"{device.Key}{KeySeparator}{component}"))
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+
+    /// <summary>Marks the components a previous run had alerted and not re-armed (its <see cref="Alerted"/>), so a
+    /// restart does not repeat their alert.</summary>
+    public void Restore(IEnumerable<string> alerted)
+    {
+        foreach (var key in alerted)
+        {
+            // Device ids never contain the separator; component names ("" or Left/Right/Case) follow the last one.
+            var split = key.LastIndexOf(KeySeparator);
+            if (split <= 0) continue;
+            AlertedComponents(key[..split]).Add(key[(split + 1)..]);
+        }
+    }
 
     public IReadOnlyList<LowBatteryAlert> Evaluate(IReadOnlyList<DeviceState> states)
     {

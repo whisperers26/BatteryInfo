@@ -43,7 +43,8 @@ instead of staying behind next to the new one; a copy that does not close within
   the left, right and case values, so it has a gap for that time.
 - The footer sets the low-battery alert level (10-30 %) and turns the alerts on or off. An alert fires once
   per discharge, when a device that is not charging reaches the level.
-- Settings, history (kept 90 days) and logs are in `%LOCALAPPDATA%\BatteryInfo`.
+- Settings, history (kept 90 days), logs and the low-battery alerts already shown are in
+  `%LOCALAPPDATA%\BatteryInfo`. The alerts are kept so that restarting the app does not repeat them.
 - `BatteryInfo.exe --demo` shows sample devices in every state; `--theme=light|dark` overrides the Windows theme.
 - In the demo, Start with Windows only flips the switch: it is not saved and does not change what starts at sign-in.
 
