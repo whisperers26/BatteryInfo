@@ -22,10 +22,20 @@
         <BooleanToVisibilityConverter x:Key="BoolToVisibility" />
         <FontFamily x:Key="IconFont">Segoe Fluent Icons, Segoe MDL2 Assets</FontFamily>
 
+        <Style x:Key="SwitchFocusVisual">
+            <Setter Property="Control.Template">
+                <Setter.Value>
+                    <ControlTemplate>
+                        <Border Margin="-3" CornerRadius="13" BorderThickness="2" BorderBrush="{DynamicResource FocusStrokeColorOuterBrush}" />
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
         <!-- A Windows 11 style on/off switch for a CheckBox. -->
         <Style x:Key="ToggleSwitchStyle" TargetType="CheckBox">
             <Setter Property="Cursor" Value="Hand" />
-            <Setter Property="FocusVisualStyle" Value="{x:Null}" />
+            <Setter Property="FocusVisualStyle" Value="{StaticResource SwitchFocusVisual}" />
             <Setter Property="Template">
                 <Setter.Value>
                     <ControlTemplate TargetType="CheckBox">
@@ -33,8 +43,6 @@
                             <Border x:Name="Track" CornerRadius="10" BorderThickness="1"
                                     BorderBrush="{DynamicResource ControlStrongStrokeColorDefaultBrush}"
                                     Background="{DynamicResource ControlAltFillColorSecondaryBrush}" />
-                            <Border x:Name="Focus" CornerRadius="12" Margin="-3" BorderThickness="2"
-                                    BorderBrush="{DynamicResource FocusStrokeColorOuterBrush}" Visibility="Collapsed" />
                             <Ellipse x:Name="Thumb" Width="12" Height="12" Margin="4,0" HorizontalAlignment="Left"
                                      Fill="{DynamicResource TextFillColorSecondaryBrush}" />
                         </Grid>
@@ -49,9 +57,6 @@
                                 <Setter TargetName="Thumb" Property="Width" Value="14" />
                                 <Setter TargetName="Thumb" Property="Height" Value="14" />
                                 <Setter TargetName="Thumb" Property="Margin" Value="3,0" />
-                            </Trigger>
-                            <Trigger Property="IsKeyboardFocused" Value="True">
-                                <Setter TargetName="Focus" Property="Visibility" Value="Visible" />
                             </Trigger>
                             <Trigger Property="IsEnabled" Value="False">
                                 <Setter Property="Opacity" Value="0.4" />
