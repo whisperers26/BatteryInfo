@@ -259,6 +259,150 @@ public class RazerBatteryProviderTests
     }
 
     [Fact]
+    public void Status_04_on_every_send_reports_asleep_without_asking_for_the_level()
+    {
+        // The dongle answers 0x04 for 07/84 and 07/80 when the mouse is asleep, off or out of range.
+        var dongle = Dongle();
+        dongle.ScriptEvery(0x84, 3, Replies.NoResponse);
+
+        var reading = PollOne();
+
+        Assert.Equal("razer:00D6", reading.DeviceId);
+        Assert.Equal(DeviceStatus.Asleep, reading.Status);
+        Assert.Empty(reading.Components);
+        Assert.Contains("asleep", reading.Detail, StringComparison.OrdinalIgnoreCase);
+        Assert.Equal(3, dongle.SentCount(0x84));
+        Assert.Equal(0, dongle.SentCount(0x80));
+    }
+
+    [Fact]
+    public void Resends_are_about_150_ms_apart()
+    {
+        var mouse = Wired();
+        mouse.ScriptEvery(0x84, 3, Replies.NoResponse);
+
+        Poll();
+
+        TimeSpan settle = TimeSpan.FromMilliseconds(20), gap = TimeSpan.FromMilliseconds(150);
+        Assert.Equal([settle, gap, settle, gap, settle], _waits);
+    }
+
+    [Fact]
+    public void Status_04_then_success_on_a_resend_reads_the_battery()
+    {
+        var mouse = Wired();
+        mouse.Script(0x84, Replies.NoResponse);
+
+        var reading = PollOne();
+
+        Assert.Equal(DeviceStatus.Online, reading.Status);
+        Assert.Equal([BatteryComponent.Single(96, ChargeState.Charging)], reading.Components);
+        Assert.Equal(2, mouse.SentCount(0x84));
+    }
+
+    [Fact]
+    public void Status_04_on_the_level_after_a_good_charging_reply_reports_asleep()
+    {
+        var mouse = Wired();
+        mouse.ScriptEvery(0x80, 3, Replies.NoResponse);
+
+        var reading = PollOne();
+
+        Assert.Equal(DeviceStatus.Asleep, reading.Status);
+        Assert.Empty(reading.Components);
+        Assert.Equal(3, mouse.SentCount(0x80));
+    }
+
+    [Fact]
+    public void A_mailbox_that_stays_busy_is_resent_twice_then_reported_as_no_reply()
+    {
+        var mouse = Wired();
+        mouse.ScriptEvery(0x84, 3, Replies.Busy);
+
+        var reading = PollOne();
+
+        Assert.Equal(DeviceStatus.Asleep, reading.Status);
+        Assert.Equal("No valid reply from the mouse", reading.Detail);
+        Assert.Equal(3, mouse.SentCount(0x84));
+        Assert.Equal(3 * 30, mouse.GetFeatureCalls);
+        Assert.Equal(0, mouse.SentCount(0x80));
+    }
+
+    [Fact]
+    public void A_crc_that_never_checks_out_is_resent_twice_then_reported_as_no_reply()
+    {
+        var mouse = Wired();
+        mouse.ScriptEvery(0x80, 3, Replies.BadCrc);
+
+        var reading = PollOne();
+
+        Assert.Equal(DeviceStatus.Asleep, reading.Status);
+        Assert.Empty(reading.Components);
+        Assert.Equal(3, mouse.SentCount(0x80));
+    }
+
+    [Fact]
+    public void Unsupported_charging_status_still_reads_the_level_without_resending()
+    {
+        var mouse = Wired();
+        mouse.Script(0x84, Replies.NotSupported);
+
+        var reading = PollOne();
+
+        Assert.Equal(DeviceStatus.Online, reading.Status);
+        Assert.Equal([BatteryComponent.Single(96, ChargeState.Unknown)], reading.Components);
+        Assert.Equal(1, mouse.SentCount(0x84));
+    }
+
+    [Fact]
+    public void Failed_charging_status_is_resent_then_the_level_is_still_read()
+    {
+        var mouse = Wired();
+        mouse.ScriptEvery(0x84, 3, Replies.Failure);
+
+        var reading = PollOne();
+
+        Assert.Equal([BatteryComponent.Single(96, ChargeState.Unknown)], reading.Components);
+        Assert.Equal(3, mouse.SentCount(0x84));
+    }
+
+    [Fact]
+    public void Unsupported_battery_level_is_an_error()
+    {
+        var mouse = Wired();
+        mouse.Script(0x80, Replies.NotSupported);
+
+        var reading = PollOne();
+
+        Assert.Equal(DeviceStatus.Error, reading.Status);
+        Assert.Empty(reading.Components);
+        Assert.NotNull(reading.Detail);
+        Assert.Equal(1, mouse.SentCount(0x80));
+    }
+
+    [Fact]
+    public void Failed_battery_level_is_resent_then_reported_as_an_error()
+    {
+        var mouse = Wired();
+        mouse.ScriptEvery(0x80, 3, Replies.Failure);
+
+        var reading = PollOne();
+
+        Assert.Equal(DeviceStatus.Error, reading.Status);
+        Assert.Equal(3, mouse.SentCount(0x80));
+    }
+
+    [Fact]
+    public void Full_on_external_power_reads_as_not_charging()
+    {
+        var mouse = Wired();
+        mouse.BatteryRaw = 255;
+        mouse.Charging = 5;
+
+        Assert.Equal([BatteryComponent.Single(100, ChargeState.NotCharging)], PollOne().Components);
+    }
+
+    [Fact]
     public async Task A_cancelled_poll_throws_and_sends_nothing()
     {
         var mouse = Wired();

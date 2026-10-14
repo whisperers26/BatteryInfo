@@ -12,10 +12,13 @@ public sealed class RazerBatteryProvider : IBatteryProvider
     public const string VendorName = "Razer";
     public const string Source = "Razer 07/80";
 
-    // razer.md §6: wait 10-30 ms after the send, then poll every 10 ms for about 300 ms.
+    // razer.md §6: wait 10-30 ms after the send, then poll every 10 ms for about 300 ms; on 0x03/0x04 (or no
+    // usable reply) resend up to 2 more times, about 150 ms apart.
     internal static readonly TimeSpan SettleDelay = TimeSpan.FromMilliseconds(20);
     internal static readonly TimeSpan PollInterval = TimeSpan.FromMilliseconds(10);
     internal const int PollsPerSend = 30;
+    internal static readonly TimeSpan ResendGap = TimeSpan.FromMilliseconds(150);
+    internal const int Sends = 3;
 
     private readonly IHidBackend _hid;
     private readonly TimeProvider _time;
@@ -104,8 +107,9 @@ public sealed class RazerBatteryProvider : IBatteryProvider
         using var connection = new GuardedHidConnection(_hid.Open(device, HidAccess.None), Policy);
 
         var charging = Exchange(connection, RazerProtocol.ChargingStatusRequest(model.TransactionId), ct);
-        if (charging.Outcome is not RazerReplyKind.Success) return NotAnswered(model, charging.Outcome);
-        var charge = RazerProtocol.ParseChargeState(charging.Reply);
+        // A mouse that does not answer 07/84 will not answer 07/80 either; a rejected 07/84 only loses the state.
+        if (charging.Outcome is RazerReplyKind.NoResponse or RazerReplyKind.Pending) return NotAnswered(model, charging.Outcome);
+        var charge = charging.Outcome == RazerReplyKind.Success ? RazerProtocol.ParseChargeState(charging.Reply) : ChargeState.Unknown;
 
         var battery = Exchange(connection, RazerProtocol.BatteryLevelRequest(model.TransactionId), ct);
         if (battery.Outcome is not RazerReplyKind.Success) return NotAnswered(model, battery.Outcome);
@@ -113,24 +117,34 @@ public sealed class RazerBatteryProvider : IBatteryProvider
         return Reading(model, DeviceStatus.Online, [BatteryComponent.Single(RazerProtocol.ParseBatteryPercent(battery.Reply), charge)]);
     }
 
-    /// <summary>Sends <paramref name="request"/> once and polls the mailbox until our reply settles. Busy, new,
-    /// foreign and bad-CRC buffers are polled again, never resent (receivers drop commands sent while relaying).
-    /// Returns <see cref="RazerReplyKind.Pending"/> when nothing usable arrived in time.</summary>
+    /// <summary>Sends <paramref name="request"/> and polls the mailbox until our reply settles. Busy, new, foreign
+    /// and bad-CRC buffers are polled again, never resent while the poll lasts (receivers drop commands sent while
+    /// relaying). 0x03/0x04, or a poll that runs out, is resent up to <see cref="Sends"/> times in all. The outcome
+    /// is the last settled status, or <see cref="RazerReplyKind.Pending"/> when nothing usable ever arrived.</summary>
     private (RazerReplyKind Outcome, byte[] Reply) Exchange(IHidConnection connection, byte[] request, CancellationToken ct)
     {
         var reply = new byte[RazerProtocol.BufferLength];
-        connection.SetFeature(request);
-        Pause(SettleDelay, ct);
-        for (var poll = 0; poll < PollsPerSend; poll++)
+        var outcome = RazerReplyKind.Pending;
+        for (var send = 0; send < Sends; send++)
         {
-            if (poll > 0) Pause(PollInterval, ct);
-            Array.Clear(reply); // byte 0 = report id 0
-            connection.GetFeature(reply);
-            var kind = RazerProtocol.Classify(request, reply);
-            if (kind is RazerReplyKind.Success or RazerReplyKind.NotSupported or RazerReplyKind.Failure or RazerReplyKind.NoResponse)
-                return (kind, reply);
+            if (send > 0) Pause(ResendGap, ct);
+            connection.SetFeature(request);
+            Pause(SettleDelay, ct);
+            for (var poll = 0; poll < PollsPerSend; poll++)
+            {
+                if (poll > 0) Pause(PollInterval, ct);
+                Array.Clear(reply); // byte 0 = report id 0
+                connection.GetFeature(reply);
+                var kind = RazerProtocol.Classify(request, reply);
+                if (kind is RazerReplyKind.Success or RazerReplyKind.NotSupported) return (kind, reply);
+                if (kind is RazerReplyKind.Failure or RazerReplyKind.NoResponse)
+                {
+                    outcome = kind;
+                    break;
+                }
+            }
         }
-        return (RazerReplyKind.Pending, reply);
+        return (outcome, reply);
     }
 
     private void Pause(TimeSpan delay, CancellationToken ct)
