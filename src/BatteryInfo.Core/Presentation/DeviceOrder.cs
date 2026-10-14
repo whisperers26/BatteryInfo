@@ -19,12 +19,14 @@ public static class DeviceOrder
     }
 
     /// <summary>The saved order after the shown devices were rearranged into <paramref name="shown"/>. The shown devices
-    /// trade places among the slots they held, so hidden ones keep theirs; shown ones not saved yet are appended.</summary>
+    /// trade places among the slots they held, so hidden ones keep theirs; shown ones not saved yet are appended. A
+    /// repeated saved id (a hand-edited file) keeps only its first slot.</summary>
     public static IReadOnlyList<string> Merge(IReadOnlyList<string> saved, IReadOnlyList<string> shown)
     {
         var shownSet = new HashSet<string>(shown, StringComparer.OrdinalIgnoreCase);
-        var savedSet = new HashSet<string>(saved, StringComparer.OrdinalIgnoreCase);
-        var full = saved.Concat(shown.Where(id => !savedSet.Contains(id))).ToList();
+        var unique = saved.Distinct(StringComparer.OrdinalIgnoreCase).ToList();
+        var savedSet = new HashSet<string>(unique, StringComparer.OrdinalIgnoreCase);
+        var full = unique.Concat(shown.Where(id => !savedSet.Contains(id))).ToList();
         var next = 0;
         for (var i = 0; i < full.Count; i++)
         {
