@@ -25,6 +25,10 @@ owner's hardware. Back to [AGENTS.md](../../AGENTS.md). Remove an entry once it 
 - **Tray app**: a physical click on the Windows 11 tray icon (tests sent the icon's callback message),
   refresh after a real sleep/resume, a taskbar theme change while running, and taskbars on the left,
   top or right (placement is unit-tested only).
+- **Tray app beside an elevated copy**: while a copy runs as administrator, starting the app normally
+  exits without showing that copy's flyout, because the elevated copy's objects refuse to be signalled
+  by a non-elevated launch. Tested on objects given an elevated token's access rules, not on a real
+  elevated copy.
 
 ## Open questions
 
