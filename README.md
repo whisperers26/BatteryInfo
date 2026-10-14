@@ -38,6 +38,7 @@ This publishes the app to `%LOCALAPPDATA%\Programs\BatteryInfo` and starts it in
   per discharge, when a device that is not charging reaches the level.
 - Settings, history (kept 90 days) and logs are in `%LOCALAPPDATA%\BatteryInfo`.
 - `BatteryInfo.exe --demo` shows sample devices in every state; `--theme=light|dark` overrides the Windows theme.
+- In the demo, Start with Windows only flips the switch: it is not saved and does not change what starts at sign-in.
 
 ## Command line
 
