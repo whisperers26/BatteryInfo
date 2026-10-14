@@ -6,8 +6,8 @@ namespace BatteryInfo.Core.Tests.Vendors.SteelSeries;
 
 public class SteelSeriesProtocolTests
 {
-    // Layout per docs/protocols/steelseries.md section 3: headset connected, 80 %, not charging.
-    internal static readonly byte[] OnlineReply = Pad65(0x00, 0xB0, 0x03, 0x00, 0x50, 0x00, 0x64, 0x64);
+    // Observed on this PC (docs/protocols/steelseries.md section 5): Nova 5X connected, 45 %, on battery.
+    internal static readonly byte[] OnlineReply = Pad65(0x00, 0xB0, 0x03, 0x02, 0x2D, 0x03, 0x64, 0x64);
 
     internal static byte[] Pad65(params byte[] head)
     {
@@ -43,7 +43,7 @@ public class SteelSeriesProtocolTests
     public void Connected_reply_gives_percent_and_discharging()
     {
         Assert.True(SteelSeriesProtocol.TryParseStatus(OnlineReply, out var status));
-        Assert.Equal(new SteelSeriesStatus(true, 80, ChargeState.Discharging), status);
+        Assert.Equal(new SteelSeriesStatus(true, 45, ChargeState.Discharging), status);
     }
 
     [Fact]

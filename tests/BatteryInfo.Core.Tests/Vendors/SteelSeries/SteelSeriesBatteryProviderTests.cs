@@ -8,7 +8,7 @@ namespace BatteryInfo.Core.Tests.Vendors.SteelSeries;
 public class SteelSeriesBatteryProviderTests
 {
     private static readonly byte[] Request = SteelSeriesProtocolTests.Pad65(0x00, 0xB0);
-    private static readonly byte[] Reply80 = SteelSeriesProtocolTests.OnlineReply;
+    private static readonly byte[] Reply45 = SteelSeriesProtocolTests.OnlineReply;
 
     private readonly FakeHidBackend _fake = new();
     private readonly ManualTimeProvider _time = new();
@@ -46,7 +46,7 @@ public class SteelSeriesBatteryProviderTests
     public void Connected_headset_reports_its_battery()
     {
         var (status, _) = AddBaseStation();
-        ReplyWith(status, Reply80);
+        ReplyWith(status, Reply45);
 
         var reading = Assert.Single(Poll());
 
@@ -55,7 +55,7 @@ public class SteelSeriesBatteryProviderTests
         Assert.Equal("SteelSeries Arctis Nova 5X", reading.Name);
         Assert.Equal(DeviceKind.Headset, reading.Kind);
         Assert.Equal(DeviceStatus.Online, reading.Status);
-        Assert.Equal([BatteryComponent.Single(80, ChargeState.Discharging)], reading.Components);
+        Assert.Equal([BatteryComponent.Single(45, ChargeState.Discharging)], reading.Components);
         Assert.Equal(_time.GetUtcNow(), reading.Timestamp);
         Assert.Equal("SteelSeries 0xB0", reading.Source);
         Assert.Null(reading.Detail);
@@ -65,7 +65,7 @@ public class SteelSeriesBatteryProviderTests
     public void Exactly_one_status_request_is_written_to_the_status_collection_only()
     {
         var (status, others) = AddBaseStation();
-        ReplyWith(status, Reply80);
+        ReplyWith(status, Reply45);
 
         Poll();
 
@@ -78,7 +78,7 @@ public class SteelSeriesBatteryProviderTests
     public void Charging_headset_reports_charging()
     {
         var (status, _) = AddBaseStation();
-        ReplyWith(status, WithByte(Reply80, 5, 0x01));
+        ReplyWith(status, WithByte(Reply45, 5, 0x01));
 
         Assert.Equal(ChargeState.Charging, Assert.Single(Poll()).Components.Single().Charge);
     }
@@ -87,7 +87,7 @@ public class SteelSeriesBatteryProviderTests
     public void Headset_off_is_asleep_without_a_stale_percent()
     {
         var (status, _) = AddBaseStation();
-        ReplyWith(status, WithByte(Reply80, 2, 0x02));
+        ReplyWith(status, WithByte(Reply45, 2, 0x02));
 
         var reading = Assert.Single(Poll());
 
@@ -100,7 +100,7 @@ public class SteelSeriesBatteryProviderTests
     public void Foreign_frames_are_skipped()
     {
         var (status, _) = AddBaseStation();
-        ReplyWith(status, SteelSeriesProtocolTests.Pad65(0x00, 0xB1, 0x07), Reply80);
+        ReplyWith(status, SteelSeriesProtocolTests.Pad65(0x00, 0xB1, 0x07), Reply45);
 
         Assert.Equal(DeviceStatus.Online, Assert.Single(Poll()).Status);
     }
@@ -141,7 +141,7 @@ public class SteelSeriesBatteryProviderTests
     public void Nova_5_base_station_is_read_too()
     {
         var (status, _) = AddBaseStation(0x2232);
-        ReplyWith(status, Reply80);
+        ReplyWith(status, Reply45);
 
         Assert.Equal("SteelSeries Arctis Nova 5", Assert.Single(Poll()).Name);
     }
