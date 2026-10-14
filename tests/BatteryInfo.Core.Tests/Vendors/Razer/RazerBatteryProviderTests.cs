@@ -614,6 +614,35 @@ public class RazerBatteryProviderTests
     }
 
     [Fact]
+    public void Default_wait_really_pauses_after_each_send()
+    {
+        Wired();
+        var provider = new RazerBatteryProvider(_backend, _time);
+        var clock = System.Diagnostics.Stopwatch.StartNew();
+
+        var reading = Assert.Single(Poll(provider));
+
+        Assert.Equal(DeviceStatus.Online, reading.Status);
+        Assert.True(clock.Elapsed >= TimeSpan.FromMilliseconds(35), $"took {clock.Elapsed.TotalMilliseconds} ms");
+    }
+
+    [Fact]
+    public async Task Default_wait_wakes_up_when_the_poll_is_cancelled()
+    {
+        // A mailbox that stays busy would keep the poll going for about 1.3 s per command.
+        var mouse = Wired();
+        mouse.ScriptEvery(0x84, 3, Replies.Busy);
+        var provider = new RazerBatteryProvider(_backend, _time);
+        using var cts = new CancellationTokenSource(TimeSpan.FromMilliseconds(50));
+        var clock = System.Diagnostics.Stopwatch.StartNew();
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => Task.Run(() => provider.PollAsync(cts.Token)));
+
+        Assert.True(clock.Elapsed < TimeSpan.FromMilliseconds(800), $"took {clock.Elapsed.TotalMilliseconds} ms");
+        Assert.Equal(0, _backend.OpenConnections);
+    }
+
+    [Fact]
     public async Task Concurrent_polls_are_serialized()
     {
         Wired();
