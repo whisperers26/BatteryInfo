@@ -10,9 +10,10 @@ owner's hardware. Back to [AGENTS.md](../../AGENTS.md). Remove an entry once it 
   "needs access".
 - **Charging states**: not observed for Logitech, ROG, Betop or FreeClip; the mappings follow the
   vendor code and references.
-- **Asleep/off replies**: ROG (expected `FF AA` or connection type 0xFF) has not been seen with the
-  keyboard actually asleep. Logitech's asleep reply is seen (`0x8F` error 0x08 on a paired slot);
-  the 0x09/0x04 codes other receivers may use are not.
+- **Asleep/off replies**: seen live for Logitech (`0x8F` error 0x08 on a paired slot) and the ROG
+  Azoth X (connection type 0xFF); the Logitech 0x09/0x04 codes other receivers may use are not.
+- **ROG beyond the OMNI keyboard**: mice behind the OMNI, the wired Azoth X (report id 0), older
+  own-dongle mice and the Cetra Open Wireless are tested with fakes only.
 - **Logitech online read through the provider**: the PRO X2 SUPERSTRIKE was asleep during every
   provider run, so feature resolution, the name read and the 0x1004 decode have only run against the
   fake receiver (the same frames were read live during the protocol research).
