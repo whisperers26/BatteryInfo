@@ -1,0 +1,13 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <AssemblyName>batteryinfo</AssemblyName>
+    <RootNamespace>BatteryInfo.Cli</RootNamespace>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\BatteryInfo.Core\BatteryInfo.Core.csproj" />
+  </ItemGroup>
+
+</Project>
