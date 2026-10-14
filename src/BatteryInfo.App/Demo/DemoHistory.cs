@@ -38,9 +38,9 @@ internal static class DemoHistory
 
         Add(DemoDevices.Mouse, "", now, DemoBatteryProvider.LowMousePercent, false, 1.6, 30, 12, 8, 24);
         Add(DemoDevices.Keyboard, "", now, DemoBatteryProvider.KeyboardStartPercent, true, 2.5, 30, 15, 8, 24);
-        Add(DemoDevices.FreeClip, "Left", now, 76, false, 9, 60, 25, 9, 23);
-        Add(DemoDevices.FreeClip, "Right", now, 75, false, 9.5, 60, 25, 9, 23);
-        Add(DemoDevices.FreeClip, "Case", now, 100, false, 1.2, 25, 45, 0, 24);
+        Add(DemoDevices.FreeClip, "Left", now, 76, false, 4, 60, 30, 8, 22);
+        Add(DemoDevices.FreeClip, "Right", now, 75, false, 4.2, 60, 30, 8, 22);
+        Add(DemoDevices.FreeClip, "Case", now, 100, false, 0.8, 25, 50, 0, 24);
         Add(DemoDevices.FreeBuds, "", now, 80, false, 7, 50, 30, 10, 22, roundTo: 10);
         Add(DemoDevices.Controller, "", now - TimeSpan.FromMinutes(14), 82, false, 6, 30, 20, 17, 24);
         Add(DemoDevices.Cetra, "Left", lastNight, 64, false, 8, 50, 20, 9, 21);
