@@ -1,5 +1,4 @@
 using System.Collections.ObjectModel;
-using System.Windows.Input;
 using BatteryInfo.Core.History;
 using BatteryInfo.Core.Model;
 using BatteryInfo.Core.Monitoring;
@@ -20,14 +19,12 @@ public sealed class DeviceViewModel : ObservableObject
     private DateTimeOffset _historyFrom;
     private DateTimeOffset _historyTo;
 
+    private readonly Action<DeviceViewModel> _expandedChanged;
+
     public DeviceViewModel(string id, Action<DeviceViewModel> expandedChanged)
     {
         Id = id;
-        ToggleExpandedCommand = new RelayCommand(() =>
-        {
-            IsExpanded = !IsExpanded;
-            expandedChanged(this);
-        });
+        _expandedChanged = expandedChanged;
     }
 
     public string Id { get; }
@@ -64,10 +61,14 @@ public sealed class DeviceViewModel : ObservableObject
         private set => SetProperty(ref _isDimmed, value);
     }
 
+    /// <summary>Shows the history chart. Expanding one row collapses the others.</summary>
     public bool IsExpanded
     {
         get => _isExpanded;
-        set => SetProperty(ref _isExpanded, value);
+        set
+        {
+            if (SetProperty(ref _isExpanded, value)) _expandedChanged(this);
+        }
     }
 
     public ObservableCollection<ComponentViewModel> Components { get; } = [];
@@ -92,8 +93,6 @@ public sealed class DeviceViewModel : ObservableObject
         get => _historyTo;
         private set => SetProperty(ref _historyTo, value);
     }
-
-    public ICommand ToggleExpandedCommand { get; }
 
     public static string GlyphFor(DeviceKind kind) => kind switch
     {
