@@ -24,6 +24,7 @@ public sealed class FlyoutViewModel : ObservableObject
     private int _threshold;
     private bool _notificationsEnabled;
     private bool _startWithWindows;
+    private bool _isOpen;
 
     public FlyoutViewModel(IFlyoutServices services, AppSettings settings)
     {
@@ -93,6 +94,19 @@ public sealed class FlyoutViewModel : ObservableObject
         }
     }
 
+    /// <summary>Whether the flyout is on screen. An expanded row's history is read only while it is, and again
+    /// each time it opens, so polls while it is hidden cost no disk reads.</summary>
+    public bool IsOpen
+    {
+        get => _isOpen;
+        set
+        {
+            if (_isOpen == value) return;
+            _isOpen = value;
+            if (value && Devices.FirstOrDefault(d => d.IsExpanded) is { } expanded) LoadHistory(expanded, _services.Now);
+        }
+    }
+
     public void ReloadStartWithWindows()
     {
         _startWithWindows = _services.IsStartWithWindowsEnabled();
@@ -124,7 +138,7 @@ public sealed class FlyoutViewModel : ObservableObject
                 Devices.Move(Devices.IndexOf(existing), index);
             }
             existing.Update(state, now, _threshold);
-            if (existing.IsExpanded) LoadHistory(existing, now);
+            if (existing.IsExpanded && _isOpen) LoadHistory(existing, now);
         }
         while (Devices.Count > _snapshot.Count) Devices.RemoveAt(Devices.Count - 1);
         OnPropertyChanged(nameof(HasDevices));
@@ -158,7 +172,7 @@ public sealed class FlyoutViewModel : ObservableObject
             return;
         }
         foreach (var other in Devices.Where(d => d != device)) other.IsExpanded = false;
-        LoadHistory(device, _services.Now);
+        if (_isOpen) LoadHistory(device, _services.Now);
     }
 
     // Reading and parsing the month files takes milliseconds that grow with the history: never on the UI thread.

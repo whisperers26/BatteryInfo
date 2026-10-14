@@ -24,6 +24,7 @@ public partial class FlyoutWindow : Window
         DataContext = viewModel;
         SourceInitialized += (_, _) => NativeMethods.SetCornerPreference(Handle, NativeMethods.DwmwcpRound);
         Deactivated += (_, _) => HideFlyout();
+        IsVisibleChanged += (_, e) => viewModel.IsOpen = (bool)e.NewValue;
         SizeChanged += (_, _) =>
         {
             if (IsVisible) FlyoutPositioner.Position(this);
