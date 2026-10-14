@@ -21,7 +21,8 @@ into firmware-update mode.
    → hardware-safety.md
 4. **`dotnet build` (warnings are errors) and `dotnet test` pass before every push.**
 5. **Update the README** in the same PR when what the user sees changes.
-6. **No NuGet packages** in `BatteryInfo.Core`, `BatteryInfo.App` or `BatteryInfo.Cli`.
+6. **No NuGet packages** in `BatteryInfo.Core`, `BatteryInfo.App` or `BatteryInfo.Cli`, except Velopack in
+   `BatteryInfo.App` (installer and updates).
 
 ## Commands
 
@@ -31,7 +32,8 @@ dotnet test BatteryInfo.slnx
 dotnet run --project src/BatteryInfo.Cli -- list --trace      # read every device once, frames on stderr
 dotnet run --project src/BatteryInfo.Cli -- hid               # HID collections on this PC
 dotnet run --project src/BatteryInfo.App -- --demo           # tray app with sample devices (own data folder)
-powershell -File scripts/publish.ps1 -Start                   # install to %LOCALAPPDATA%\Programs\BatteryInfo
+powershell -File scripts/publish.ps1 -Start                   # local build to %LOCALAPPDATA%\Programs\BatteryInfo
+git tag v1.2.3 && git push origin v1.2.3                     # release: Setup.exe + update feed (on main only)
 ```
 
 ## Where things go
