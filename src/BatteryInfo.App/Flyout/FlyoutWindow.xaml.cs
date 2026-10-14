@@ -39,7 +39,12 @@ public partial class FlyoutWindow : Window
         DeviceList.PreviewMouseLeftButtonDown += OnRowPressed;
         DeviceList.PreviewMouseMove += OnRowDragged;
         DeviceList.PreviewMouseLeftButtonUp += OnRowReleased;
-        DeviceList.LostMouseCapture += (_, _) => EndDrag();
+        // LostMouseCapture bubbles: taking the capture from the row's toggle button raises it here too. Only the list's
+        // own loss ends the drag.
+        DeviceList.LostMouseCapture += (_, e) =>
+        {
+            if (e.OriginalSource == DeviceList) EndDrag();
+        };
     }
 
     private FlyoutViewModel ViewModel => (FlyoutViewModel)DataContext;
