@@ -1,5 +1,7 @@
 using System.IO;
 using System.Windows;
+using System.Windows.Interop;
+using System.Windows.Media;
 using System.Windows.Threading;
 using BatteryInfo.App.Flyout;
 using BatteryInfo.App.Interop;
@@ -36,8 +38,15 @@ public partial class App : Application, IFlyoutServices
     private FlyoutViewModel? _flyoutViewModel;
     private FlyoutWindow? _flyout;
 
-    // Before WPF or WinForms create any window, so both lay out per monitor.
-    static App() => DpiAwarenessSet = NativeMethods.EnablePerMonitorDpiAwareness();
+    static App()
+    {
+        // Before WPF or WinForms create any window, so both lay out per monitor.
+        DpiAwarenessSet = NativeMethods.EnablePerMonitorDpiAwareness();
+
+        // Hardware-rendered WPF content stays blank on indirect (virtual) displays, such as the streaming display
+        // this PC uses as its primary screen. The flyout is small, so software rendering costs nothing noticeable.
+        RenderOptions.ProcessRenderMode = RenderMode.SoftwareOnly;
+    }
 
     protected override void OnStartup(StartupEventArgs e)
     {
