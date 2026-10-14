@@ -43,6 +43,30 @@ public sealed class SingleInstanceTests
         Assert.False(showRequest.WaitOne(0));
     }
 
+    [Fact]
+    public void TryAcquire_returns_null_when_the_running_copy_denies_this_user_its_mutex()
+    {
+        // An elevated copy started under another logon: nothing in its mutex's DACL grants this user access.
+        using var running = CreateMutex($@"Local\{_name}.SingleInstance", "D:");
+
+        Assert.Null(SingleInstance.TryAcquire(_name));
+    }
+
+    [Fact]
+    public void TryAcquire_returns_null_when_another_kind_of_object_holds_the_name()
+    {
+        using var squatter = new EventWaitHandle(false, EventResetMode.ManualReset, $@"Local\{_name}.SingleInstance");
+
+        Assert.Null(SingleInstance.TryAcquire(_name));
+    }
+
+    private static Mutex CreateMutex(string name, string sddl)
+    {
+        var security = new MutexSecurity();
+        security.SetSecurityDescriptorSddlForm(sddl);
+        return MutexAcl.Create(false, name, out _, security);
+    }
+
     private static EventWaitHandle CreateEvent(string name, string sddl)
     {
         var security = new EventWaitHandleSecurity();

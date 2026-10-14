@@ -19,7 +19,18 @@ internal sealed class SingleInstance : IDisposable
     /// <summary>Returns null when another instance with this name is already running.</summary>
     public static SingleInstance? TryAcquire(string name)
     {
-        var mutex = new Mutex(false, $@"Local\{name}.SingleInstance", out var createdNew);
+        Mutex mutex;
+        bool createdNew;
+        try
+        {
+            mutex = new Mutex(false, $@"Local\{name}.SingleInstance", out createdNew);
+        }
+        catch (Exception ex) when (ex is UnauthorizedAccessException or WaitHandleCannotBeOpenedException)
+        {
+            // The name is held by something this launch cannot open: an elevated copy started under another logon,
+            // or an object of another kind. Either way it is taken, so this launch must not run as well.
+            return null;
+        }
         if (!createdNew)
         {
             mutex.Dispose();
