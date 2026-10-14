@@ -19,6 +19,8 @@ owner's hardware. Back to [AGENTS.md](../../AGENTS.md). Remove an entry once it 
   fake receiver (the same frames were read live during the protocol research).
 - **Wired modes**: Logitech mouse on its cable (046D:C0A8), Azoth X on USB (0B05:1C24, report id 0),
   Betop wired pad (20BC:518C), ROG Cetra Open Wireless (0B05:1CAC).
+- **Betop**: charging (byte 4 low nibble 1) comes from BetopGame's UI code only; sibling models other
+  than the KP70C2 are untested.
 
 ## Open questions
 
