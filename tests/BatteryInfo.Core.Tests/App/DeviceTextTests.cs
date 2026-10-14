@@ -75,6 +75,14 @@ public class DeviceTextTests
     }
 
     [Fact]
+    public void Approximate_note_does_not_blame_windows_for_a_device_estimate()
+    {
+        var fromVoltage = Mouse(DeviceStatus.Online, 81, approximate: true) with { Source = "HID++ 0x1001" };
+
+        Assert.Equal("Estimated from the battery voltage or level", DeviceText.ApproximateNote(fromVoltage));
+    }
+
+    [Fact]
     public void Online_with_a_detail_shows_the_detail()
     {
         Assert.Equal("Timed out reading devices.",

@@ -26,7 +26,9 @@ public static class DeviceText
 
     /// <summary>The tooltip's note on where an approximate value came from; null for an exact value.</summary>
     public static string? ApproximateNote(DeviceReading reading) =>
-        reading.Approximate ? "Windows' own value, which can be about 5 points high" : null;
+        !reading.Approximate ? null
+        : IsFromWindows(reading) ? "Windows' own value, which can be about 5 points high"
+        : "Estimated from the battery voltage or level";
 
     /// <summary>"56 %", "≈80 %" for an approximate value, "–" when unknown.</summary>
     public static string Percent(int? percent, bool approximate) =>
