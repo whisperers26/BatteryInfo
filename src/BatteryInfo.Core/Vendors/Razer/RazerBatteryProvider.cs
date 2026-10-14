@@ -1,3 +1,4 @@
+using BatteryInfo.Core.Diagnostics;
 using BatteryInfo.Core.Hid;
 using BatteryInfo.Core.Model;
 using BatteryInfo.Core.Monitoring;
@@ -68,16 +69,18 @@ public sealed class RazerBatteryProvider : IBatteryProvider
 
     /// <summary>The MI_00 mouse TLC that carries the Razer report: UP 1, U 2, 91-byte feature report with report
     /// id 0, and not one of the RZVIRTUAL children Razer's driver adds (razer.md §2). Matched by caps, never by
-    /// collection index.</summary>
+    /// collection index. A plain MI_00 path Windows would not open while listing has no caps to check; MI_00 holds
+    /// a single TLC, so it is that collection, and it is reported as needing access.</summary>
     internal static bool IsReportCollection(HidDeviceInfo device) =>
         device.InterfaceNumber == 0
         && !device.Path.Contains("&col", StringComparison.OrdinalIgnoreCase)
         && !device.Path.Contains("rzvirtual", StringComparison.OrdinalIgnoreCase)
         && device.InstanceId?.Contains("RZVIRTUAL", StringComparison.OrdinalIgnoreCase) != true
-        && device.UsagePage == 0x0001
-        && device.Usage == 0x0002
-        && device.FeatureReportLength == RazerProtocol.BufferLength
-        && device.FeatureReportId is null or 0;
+        && (!device.Accessible
+            || (device.UsagePage == 0x0001
+                && device.Usage == 0x0002
+                && device.FeatureReportLength == RazerProtocol.BufferLength
+                && device.FeatureReportId is null or 0));
 
     private IReadOnlyList<DeviceReading> Poll(CancellationToken ct)
     {
@@ -104,8 +107,36 @@ public sealed class RazerBatteryProvider : IBatteryProvider
 
     private DeviceReading Read(RazerModel model, RazerLink link, HidDeviceInfo device, CancellationToken ct)
     {
-        using var connection = new GuardedHidConnection(_hid.Open(device, HidAccess.None), Policy);
+        if (!device.Accessible) return NeedsAccess(model);
+        try
+        {
+            // Zero access: HidD_Set/GetFeature are FILE_ANY_ACCESS, and the open stays shared with Synapse.
+            using var connection = new GuardedHidConnection(_hid.Open(device, HidAccess.None), Policy);
+            return Query(connection, model, link, ct);
+        }
+        catch (HidIoException e) when (e.Win32Error == HidIoException.AccessDenied)
+        {
+            return NeedsAccess(model);
+        }
+        catch (HidIoException e) when (e.DeviceGone)
+        {
+            // Unplugged mid-poll, or the dongle stalled the request; the device-change watcher triggers a rescan.
+            return Reading(model, DeviceStatus.Asleep, detail: "Stopped responding");
+        }
+        catch (HidIoException e)
+        {
+            Log.Warn($"Razer {device.Label}: {e.Message}");
+            return Reading(model, DeviceStatus.Error, detail: $"HID error {e.Win32Error}");
+        }
+        catch (UnsafeCommandException e)
+        {
+            Log.Error($"Razer {device.Label}: the allow-list refused a frame this provider built", e);
+            return Reading(model, DeviceStatus.Error, detail: "Internal error: unsafe command refused");
+        }
+    }
 
+    private DeviceReading Query(IHidConnection connection, RazerModel model, RazerLink link, CancellationToken ct)
+    {
         if (link == RazerLink.Dongle)
         {
             // The dongle answers 00/BF itself, so an unlinked mouse is known without waiting out 07/xx timeouts.
@@ -169,6 +200,10 @@ public sealed class RazerBatteryProvider : IBatteryProvider
         Wait(delay, ct);
         ct.ThrowIfCancellationRequested();
     }
+
+    // razer.md §2: non-elevated access to the mouse TLC relies on the devnode security Razer's driver installs.
+    private DeviceReading NeedsAccess(RazerModel model) =>
+        Reading(model, DeviceStatus.NeedsAccess, detail: "Windows denied access (needs Razer's driver package)");
 
     private DeviceReading NotAnswered(RazerModel model, RazerReplyKind outcome) => outcome switch
     {

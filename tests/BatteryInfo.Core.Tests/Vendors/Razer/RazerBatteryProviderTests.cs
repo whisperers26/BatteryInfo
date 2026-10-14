@@ -1,5 +1,7 @@
+using BatteryInfo.Core.Diagnostics;
 using BatteryInfo.Core.Hid;
 using BatteryInfo.Core.Model;
+using BatteryInfo.Core.Safety;
 using BatteryInfo.Core.Tests.Fakes;
 using BatteryInfo.Core.Vendors.Razer;
 
@@ -457,6 +459,133 @@ public class RazerBatteryProviderTests
         mouse.Charging = 5;
 
         Assert.Equal([BatteryComponent.Single(100, ChargeState.NotCharging)], PollOne().Components);
+    }
+
+    [Fact]
+    public void Access_denied_on_open_needs_access()
+    {
+        // Without Razer's driver package, non-elevated opens of the mouse TLC fail with ERROR_ACCESS_DENIED.
+        var dongle = Dongle();
+        dongle.Device.OpenError = new HidIoException("Cannot open 1532:00D7", HidIoException.AccessDenied);
+
+        var reading = PollOne();
+
+        Assert.Equal("razer:00D6", reading.DeviceId);
+        Assert.Equal(DeviceStatus.NeedsAccess, reading.Status);
+        Assert.Empty(reading.Components);
+        Assert.Contains("access", reading.Detail, StringComparison.OrdinalIgnoreCase);
+        Assert.Equal([HidAccess.None], dongle.Device.Opens);
+        Assert.Empty(dongle.Device.FeaturesSet);
+    }
+
+    [Fact]
+    public void Collection_windows_could_not_open_while_listing_needs_access_without_another_open()
+    {
+        // What WindowsHidBackend lists when its zero-access open fails: path and ids only, no caps.
+        var dongle = Mailbox(0x00D7, DonglePath, usagePage: 0, usage: 0, feature: 0, featureReportId: null, accessible: false);
+
+        var reading = PollOne();
+
+        Assert.Equal(DeviceStatus.NeedsAccess, reading.Status);
+        Assert.Empty(dongle.Device.Opens);
+    }
+
+    [Fact]
+    public void Unopenable_children_and_other_interfaces_are_not_reported()
+    {
+        Mailbox(0x00D7, @"\\?\hid#vid_1532&pid_00d7&mi_01&col01#8&2c&0&0000#" + Hid, 0, 0, 0, mi: 1, featureReportId: null,
+            accessible: false);
+        Mailbox(0x00D7, @"\\?\hid#rzvirtual&vid_1532&pid_00d7&mi_00&col03&col01#9&1f&0&0000#" + Hid, 0, 0, 0,
+            featureReportId: null, accessible: false);
+
+        Assert.Empty(Poll());
+    }
+
+    [Fact]
+    public void Access_denied_on_a_feature_request_needs_access()
+    {
+        var mouse = Wired();
+        mouse.SetFeatureError = new HidIoException("HidD_SetFeature", HidIoException.AccessDenied);
+
+        Assert.Equal(DeviceStatus.NeedsAccess, PollOne().Status);
+        Assert.Equal(0, _backend.OpenConnections);
+    }
+
+    [Theory]
+    [InlineData(1167)] // ERROR_DEVICE_NOT_CONNECTED
+    [InlineData(6)] // ERROR_INVALID_HANDLE
+    [InlineData(995)] // ERROR_OPERATION_ABORTED
+    [InlineData(31)] // ERROR_GEN_FAILURE
+    [InlineData(22)] // ERROR_BAD_COMMAND
+    public void Device_gone_mid_poll_ends_the_poll_quietly_as_asleep(int win32Error)
+    {
+        var dongle = Dongle();
+        dongle.GetFeatureError = new HidIoException("HidD_GetFeature", win32Error);
+
+        var reading = PollOne();
+
+        Assert.Equal("razer:00D6", reading.DeviceId);
+        Assert.Equal(DeviceStatus.Asleep, reading.Status);
+        Assert.Empty(reading.Components);
+        Assert.NotNull(reading.Detail);
+        Assert.Single(dongle.Device.FeaturesSet);
+        Assert.Equal(0, _backend.OpenConnections);
+    }
+
+    [Fact]
+    public void Device_gone_before_the_open_is_asleep()
+    {
+        var dongle = Dongle();
+        dongle.Device.OpenError = new HidIoException("Cannot open", 1167);
+
+        Assert.Equal(DeviceStatus.Asleep, PollOne().Status);
+    }
+
+    [Fact]
+    public void Other_hid_failures_are_errors_with_the_win32_code()
+    {
+        var mouse = Wired();
+        mouse.GetFeatureError = new HidIoException("HidD_GetFeature", 87);
+
+        var reading = PollOne();
+
+        Assert.Equal(DeviceStatus.Error, reading.Status);
+        Assert.Contains("87", reading.Detail);
+        Assert.Equal(0, _backend.OpenConnections);
+    }
+
+    private sealed class RefuseEverything : ICommandPolicy
+    {
+        public bool IsAllowed(HidDeviceInfo device, ReadOnlySpan<byte> outgoing) => false;
+    }
+
+    [Fact]
+    public void A_refused_frame_is_an_internal_error_and_nothing_is_sent()
+    {
+        var mouse = Wired();
+        var lines = new List<string>();
+        void Collect(string line)
+        {
+            lock (lines) lines.Add(line);
+        }
+        var provider = new RazerBatteryProvider(_backend, _time) { Wait = (_, _) => { }, Policy = new RefuseEverything() };
+
+        Log.LineWritten += Collect;
+        DeviceReading reading;
+        try
+        {
+            reading = Assert.Single(Poll(provider));
+        }
+        finally
+        {
+            Log.LineWritten -= Collect;
+        }
+
+        Assert.Equal(DeviceStatus.Error, reading.Status);
+        Assert.Equal("Internal error: unsafe command refused", reading.Detail);
+        Assert.Empty(mouse.Device.FeaturesSet);
+        Assert.Equal(0, _backend.OpenConnections);
+        lock (lines) Assert.Contains(lines, l => l.Contains(" ERROR ") && l.Contains("Razer"));
     }
 
     [Fact]
