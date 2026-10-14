@@ -38,7 +38,7 @@ public static class RazerModels
     public const ushort BluetoothVendorId = 0x068E;
 
     /// <summary>Add a product here (PIDs from openrazer/OpenRGB) to read it; its commands must also be on the
-    /// allow-list in <c>RazerCommandPolicy</c>.</summary>
+    /// allow-list in <see cref="RazerCommandPolicy"/>.</summary>
     public static IReadOnlyList<RazerModel> All { get; } =
     [
         new("Razer Basilisk V3 Pro 35K", DeviceKind.Mouse, WiredPid: 0x00D6, DonglePid: 0x00D7, BluetoothPid: 0x00D8),
