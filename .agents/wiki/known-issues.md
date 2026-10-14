@@ -22,6 +22,10 @@ owner's hardware. Back to [AGENTS.md](../../AGENTS.md). Remove an entry once it 
 - **Betop**: charging (byte 4 low nibble 1) comes from BetopGame's UI code only; sibling models other
   than the KP70C2 are untested.
 
+- **Tray app**: a physical click on the Windows 11 tray icon (tests sent the icon's callback message),
+  refresh after a real sleep/resume, a taskbar theme change while running, and taskbars on the left,
+  top or right (placement is unit-tested only).
+
 ## Open questions
 
 - Does polling every 2 minutes delay the Azoth X's idle sleep? The interval is a setting.
