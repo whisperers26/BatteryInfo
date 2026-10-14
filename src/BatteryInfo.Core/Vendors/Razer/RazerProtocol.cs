@@ -1,3 +1,5 @@
+using BatteryInfo.Core.Model;
+
 namespace BatteryInfo.Core.Vendors.Razer;
 
 /// <summary>The Razer 90-byte feature report (docs/protocols/razer.md §3-4), carried in a 91-byte Windows buffer
@@ -91,6 +93,39 @@ public static class RazerProtocol
         };
     }
 
+    /// <summary>Raw 0..255 to percent, as Synapse's Math.floor(raw / 255 * 100) (razer.md §4a).</summary>
+    public static int BatteryPercent(byte raw) => raw * 100 / 255;
+
+    /// <summary>The level in a successful 07/80 reply: args[1].</summary>
+    public static int ParseBatteryPercent(ReadOnlySpan<byte> reply) => BatteryPercent(reply[ArgumentsIndex + 1]);
+
+    /// <summary>The state in a successful 07/84 reply: args[1].</summary>
+    public static ChargeState ParseChargeState(ReadOnlySpan<byte> reply) => ChargeStateFrom(reply[ArgumentsIndex + 1]);
+
+    /// <summary>Synapse's charging enum (razer.md §4b).</summary>
+    public static ChargeState ChargeStateFrom(byte value) => value switch
+    {
+        0 => ChargeState.Discharging, // NoCharge_BatteryFull: not on external power
+        1 or 4 => ChargeState.Charging, // Charging, FastCharging
+        2 or 3 => ChargeState.Fault, // ChargingFailed, ForeignObjectDetection
+        5 or 6 => ChargeState.NotCharging, // FullCharging, ReachChargingLimit: on power, held
+        _ => ChargeState.Unknown,
+    };
+
+    /// <summary>The slots in a successful 00/BF reply: args = [count, count x (status, pidHi, pidLo)].</summary>
+    public static IReadOnlyList<RazerLinkSlot> ParseWirelessStatus(ReadOnlySpan<byte> reply)
+    {
+        var args = reply.Slice(ArgumentsIndex, ArgumentCount);
+        var count = Math.Min((int)args[0], (ArgumentCount - 1) / 3);
+        var slots = new List<RazerLinkSlot>(count);
+        for (var i = 0; i < count; i++)
+        {
+            var slot = args.Slice(1 + i * 3, 3);
+            slots.Add(new RazerLinkSlot(slot[0] == 1, (ushort)(slot[1] << 8 | slot[2])));
+        }
+        return slots;
+    }
+
     private static bool IsReplyTo(ReadOnlySpan<byte> request, ReadOnlySpan<byte> reply)
     {
         if (request.Length != BufferLength || reply.Length != BufferLength || reply[0] != request[0]) return false;
@@ -103,6 +138,14 @@ public static class RazerProtocol
         }
         return request[ClassIndex] != BatteryClass || reply[ArgumentsIndex] == request[ArgumentsIndex];
     }
+}
+
+/// <summary>One slot of a dongle's 00/BF link table.</summary>
+/// <param name="Linked">Status 1: the device in this slot is connected to the dongle.</param>
+/// <param name="ProductId">The device's PID, 0xFFFF for an empty slot.</param>
+public readonly record struct RazerLinkSlot(bool Linked, ushort ProductId)
+{
+    public bool IsEmpty => ProductId == 0xFFFF;
 }
 
 /// <summary>How a GetFeature buffer relates to the request just sent.</summary>

@@ -1,3 +1,4 @@
+using BatteryInfo.Core.Model;
 using BatteryInfo.Core.Vendors.Razer;
 
 namespace BatteryInfo.Core.Tests.Vendors.Razer;
@@ -177,6 +178,77 @@ public class RazerProtocolTests
 
         Assert.Equal(RazerReplyKind.Foreign, RazerProtocol.Classify(request, otherId));
         Assert.Equal(RazerReplyKind.Foreign, RazerProtocol.Classify(request, reply.AsSpan(0, 90)));
+    }
+
+    [Theory]
+    [InlineData(245, 96)]
+    [InlineData(255, 100)]
+    [InlineData(217, 85)]
+    [InlineData(0, 0)]
+    [InlineData(1, 0)]
+    // Observed pairs (razer.md §4a).
+    [InlineData(220, 86)]
+    [InlineData(222, 87)]
+    [InlineData(225, 88)]
+    [InlineData(227, 89)]
+    [InlineData(230, 90)]
+    [InlineData(233, 91)]
+    [InlineData(235, 92)]
+    [InlineData(238, 93)]
+    [InlineData(240, 94)]
+    [InlineData(243, 95)]
+    [InlineData(248, 97)]
+    [InlineData(250, 98)]
+    [InlineData(253, 99)]
+    public void Battery_percent_is_raw_times_100_over_255_rounded_down(byte raw, int percent)
+    {
+        Assert.Equal(percent, RazerProtocol.BatteryPercent(raw));
+        Assert.Equal(percent, RazerProtocol.ParseBatteryPercent(Reply(0x02, 0x07, 0x80, 0x02, [0x00, raw])));
+    }
+
+    [Theory]
+    [InlineData(0, ChargeState.Discharging)] // NoCharge_BatteryFull: on battery
+    [InlineData(1, ChargeState.Charging)]
+    [InlineData(2, ChargeState.Fault)] // ChargingFailed
+    [InlineData(3, ChargeState.Fault)] // ForeignObjectDetection
+    [InlineData(4, ChargeState.Charging)] // FastCharging
+    [InlineData(5, ChargeState.NotCharging)] // FullCharging: on power, held
+    [InlineData(6, ChargeState.NotCharging)] // ReachChargingLimit
+    [InlineData(7, ChargeState.Unknown)]
+    [InlineData(0xFF, ChargeState.Unknown)]
+    public void Charging_status_maps_the_synapse_enum(byte value, ChargeState expected)
+    {
+        Assert.Equal(expected, RazerProtocol.ChargeStateFrom(value));
+        Assert.Equal(expected, RazerProtocol.ParseChargeState(Reply(0x02, 0x07, 0x84, 0x02, [0x00, value])));
+    }
+
+    [Fact]
+    public void Wireless_status_lists_linked_and_empty_slots()
+    {
+        // args 02 | 01 00 D7 | 00 FF FF: two slots, slot 1 linked to PID 00D7, slot 2 empty.
+        var slots = RazerProtocol.ParseWirelessStatus(Reply(0x02, 0x00, 0xBF, 0x50, [0x02, 0x01, 0x00, 0xD7, 0x00, 0xFF, 0xFF]));
+
+        Assert.Equal([new RazerLinkSlot(true, 0x00D7), new RazerLinkSlot(false, 0xFFFF)], slots);
+        Assert.False(slots[0].IsEmpty);
+        Assert.True(slots[1].IsEmpty);
+    }
+
+    [Fact]
+    public void Wireless_status_reports_an_unlinked_mouse()
+    {
+        // args 02 | 00 00 D7 | 00 FF FF: the mouse is off or out of range.
+        var slots = RazerProtocol.ParseWirelessStatus(Reply(0x02, 0x00, 0xBF, 0x50, [0x02, 0x00, 0x00, 0xD7, 0x00, 0xFF, 0xFF]));
+
+        Assert.Equal(new RazerLinkSlot(false, 0x00D7), slots[0]);
+    }
+
+    [Fact]
+    public void Wireless_status_count_is_capped_to_the_argument_area()
+    {
+        var args = new byte[80];
+        args[0] = 0xFF;
+
+        Assert.Equal(26, RazerProtocol.ParseWirelessStatus(Reply(0x02, 0x00, 0xBF, 0x50, args)).Count);
     }
 
     [Fact]
