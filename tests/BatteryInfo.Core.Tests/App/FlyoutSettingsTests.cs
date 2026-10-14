@@ -1,43 +1,12 @@
 using BatteryInfo.App.ViewModels;
-using BatteryInfo.Core.History;
 using BatteryInfo.Core.Settings;
+using BatteryInfo.Core.Tests.Fakes;
 
 namespace BatteryInfo.Core.Tests.App;
 
 public class FlyoutSettingsTests
 {
-    private sealed class Services : IFlyoutServices
-    {
-        public DateTimeOffset Now => DateTimeOffset.UnixEpoch;
-
-        public Task RefreshAsync() => Task.CompletedTask;
-
-        public IReadOnlyList<HistorySeries> LoadHistory(string deviceId, DateTimeOffset since) => [];
-
-        public bool IsStartWithWindowsEnabled() => false;
-
-        public void SetStartWithWindows(bool enabled)
-        {
-        }
-
-        public void SetLowBatteryThreshold(int percent)
-        {
-        }
-
-        public void SetNotificationsEnabled(bool enabled)
-        {
-        }
-
-        public void SetAutoUpdate(bool enabled)
-        {
-        }
-
-        public void RunUpdateAction()
-        {
-        }
-    }
-
-    private static FlyoutViewModel Flyout() => new(new Services(), new AppSettings());
+    private static FlyoutViewModel Flyout() => new(new FakeFlyoutServices(), new AppSettings());
 
     [Fact]
     public void Settings_start_collapsed()
