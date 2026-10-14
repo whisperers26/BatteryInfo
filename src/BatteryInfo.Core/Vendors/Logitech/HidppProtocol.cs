@@ -1,3 +1,5 @@
+using BatteryInfo.Core.Model;
+
 namespace BatteryInfo.Core.Vendors.Logitech;
 
 /// <summary>HID++ feature ids this app looks up (docs/protocols/logitech.md §6, §7, §9).</summary>
@@ -32,6 +34,15 @@ public readonly record struct HidppMatch(HidppMatchKind Kind, byte ErrorCode = 0
 
 /// <param name="Index">Feature index on this device, 0 when the feature is not supported.</param>
 public readonly record struct HidppFeatureInfo(byte Index, byte Flags, byte Version);
+
+/// <summary>Receiver register B5 sub-register 03.</summary>
+public readonly record struct HidppReceiverInfo(uint Serial, int MaxDevices);
+
+/// <summary>Receiver register B5 sub-register 2n: the wireless product id and HID++ 1.0 device kind of a slot.</summary>
+public readonly record struct HidppPairingInfo(ushort Wpid, byte Kind);
+
+/// <summary>DEVICE_FW_INFO (0x0003) getDeviceInfo.</summary>
+public readonly record struct HidppDeviceIds(uint UnitId, ushort? Wpid, ushort? UsbPid);
 
 /// <summary>Builds and parses HID++ 1.0 and 2.0 frames (docs/protocols/logitech.md). Pure: no I/O.</summary>
 public static class HidppProtocol
@@ -112,6 +123,80 @@ public static class HidppProtocol
 
     public static HidppFeatureInfo ParseFeatureInfo(ReadOnlySpan<byte> reply) => new(reply[4], reply[5], reply[6]);
 
+    /// <summary>B5/03: payload[1..4] = receiver serial, payload[6] = max devices (§4c). Payload starts at byte 4.</summary>
+    public static HidppReceiverInfo ParseReceiverInfo(ReadOnlySpan<byte> reply) =>
+        new(BigEndian32(reply[5..]), reply[10]);
+
+    /// <summary>B5/2n: payload[3..4] = wpid (big-endian), payload[7] &amp; 0x0F = HID++ 1.0 kind (§4d).</summary>
+    public static HidppPairingInfo ParsePairingInfo(ReadOnlySpan<byte> reply) =>
+        new((ushort)(reply[7] << 8 | reply[8]), (byte)(reply[11] & 0x0F));
+
+    /// <summary>B5/3n: payload[1..4] = device serial, equal to the device's unitId (§4d).</summary>
+    public static uint ParseExtendedPairingSerial(ReadOnlySpan<byte> reply) => BigEndian32(reply[5..]);
+
+    /// <summary>B5/4n: payload[1] = length, payload[2..] = ASCII (§4d).</summary>
+    public static string ParseCodename(ReadOnlySpan<byte> reply)
+    {
+        var text = reply[6..];
+        return DecodeName(text[..Math.Min(reply[5], text.Length)]);
+    }
+
+    /// <summary>0x0003 fn0: r1..r4 = unitId, r6 = transport bits, then 2-byte model ids for each set bit in the
+    /// order btid 0x01, btleid 0x02, wpid 0x04, usbid 0x08 (§6).</summary>
+    public static HidppDeviceIds ParseDeviceIds(ReadOnlySpan<byte> reply)
+    {
+        var transports = reply[10];
+        var models = reply[11..17];
+        ushort? wpid = null, usbPid = null;
+        var offset = 0;
+        foreach (var flag in (ReadOnlySpan<byte>)[0x01, 0x02, 0x04, 0x08])
+        {
+            if ((transports & flag) == 0) continue;
+            if (offset + 2 > models.Length) break;
+            var id = (ushort)(models[offset] << 8 | models[offset + 1]);
+            if (flag == 0x04) wpid = id;
+            if (flag == 0x08) usbPid = id;
+            offset += 2;
+        }
+        return new HidppDeviceIds(BigEndian32(reply[5..]), wpid, usbPid);
+    }
+
+    /// <summary>0x0005 fn0: r0 = name length.</summary>
+    public static int ParseNameLength(ReadOnlySpan<byte> reply) => reply[4];
+
+    /// <summary>0x0005 fn1(offset): up to 16 name bytes starting at r0.</summary>
+    public static ReadOnlySpan<byte> NameChunk(ReadOnlySpan<byte> reply, int remaining)
+    {
+        var data = reply[4..];
+        return data[..Math.Clamp(remaining, 0, Math.Min(16, data.Length))];
+    }
+
+    /// <summary>0x0005 fn2: r0 = device type.</summary>
+    public static byte ParseDeviceType(ReadOnlySpan<byte> reply) => reply[4];
+
+    public static string DecodeName(ReadOnlySpan<byte> bytes)
+    {
+        var end = bytes.IndexOf((byte)0);
+        return System.Text.Encoding.UTF8.GetString(end < 0 ? bytes : bytes[..end]).Trim();
+    }
+
+    /// <summary>0x0005 device type: 0 keyboard, 1 remote, 2 numpad, 3 mouse, 4 trackpad, 5 trackball, 6 presenter,
+    /// 7 receiver.</summary>
+    public static DeviceKind KindFromDeviceType(byte type) => type switch
+    {
+        0 or 2 => DeviceKind.Keyboard,
+        3 or 4 or 5 => DeviceKind.Mouse,
+        _ => DeviceKind.Other,
+    };
+
+    /// <summary>HID++ 1.0 device kind from the pairing register (1 keyboard, 2 mouse).</summary>
+    public static DeviceKind KindFromPairingKind(byte kind) => kind switch
+    {
+        1 => DeviceKind.Keyboard,
+        2 => DeviceKind.Mouse,
+        _ => DeviceKind.Other,
+    };
+
     /// <summary>Receiver notification 0x41 (§9): <c>10 dev 41 protocol info wpidLo wpidHi</c>; info bit 6 set means
     /// the link is NOT established.</summary>
     public static bool TryParseConnectionNotification(ReadOnlySpan<byte> report, out byte deviceIndex, out bool linkEstablished)
@@ -145,6 +230,8 @@ public static class HidppProtocol
         && featureIndex == wirelessStatusIndex && eventNumber == 0 && report[4] == 0x01;
 
     private static bool IsPing(ReadOnlySpan<byte> request) => request[2] == 0x00 && request[3] >> 4 == 1;
+
+    private static uint BigEndian32(ReadOnlySpan<byte> data) => System.Buffers.Binary.BinaryPrimitives.ReadUInt32BigEndian(data);
 
     private static byte Address(int function, byte softwareId)
     {
