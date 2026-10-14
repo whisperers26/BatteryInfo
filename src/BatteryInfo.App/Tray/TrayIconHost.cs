@@ -12,6 +12,7 @@ internal sealed class TrayIconHost : IDisposable
     private readonly NotifyIcon _icon;
     private readonly ContextMenuStrip _menu;
     private readonly ToolStripMenuItem _startWithWindows;
+    private readonly ToolStripMenuItem _update;
     private readonly System.Windows.Threading.Dispatcher _dispatcher;
     private System.Drawing.Icon? _image;
     private bool _lightTaskbar;
@@ -24,6 +25,8 @@ internal sealed class TrayIconHost : IDisposable
         _menu.Items.Add(MenuItem("Refresh", () => RefreshClicked?.Invoke(this, EventArgs.Empty)));
         _startWithWindows = MenuItem("Start with Windows", () => StartWithWindowsClicked?.Invoke(this, EventArgs.Empty));
         _menu.Items.Add(_startWithWindows);
+        _update = MenuItem(UpdateText.CheckLabel, () => UpdateClicked?.Invoke(this, EventArgs.Empty));
+        _menu.Items.Add(_update);
         _menu.Items.Add(new ToolStripSeparator());
         _menu.Items.Add(MenuItem("Exit", () => ExitClicked?.Invoke(this, EventArgs.Empty)));
         _menu.Opening += (_, _) =>
@@ -52,6 +55,15 @@ internal sealed class TrayIconHost : IDisposable
 
     public event EventHandler? StartWithWindowsClicked;
 
+    /// <summary>The update item: "Check for updates", or "Restart to update" once one is downloaded.</summary>
+    public event EventHandler? UpdateClicked;
+
+    public void SetUpdateItem(string text, bool enabled)
+    {
+        _update.Text = text;
+        _update.Enabled = enabled;
+    }
+
     /// <summary>Asked each time the menu opens, so the check mark follows the registry.</summary>
     public Func<bool>? IsStartWithWindows { get; set; }
 
@@ -64,6 +76,9 @@ internal sealed class TrayIconHost : IDisposable
         const int maxText = 255;
         _icon.ShowBalloonTip(5000, title, text.Length <= maxText ? text : text[..(maxText - 1)] + "…", ToolTipIcon.Warning);
     }
+
+    /// <summary>Shows an information notification (a toast on Windows 11).</summary>
+    public void ShowInfo(string title, string text) => _icon.ShowBalloonTip(5000, title, text, ToolTipIcon.Info);
 
     public void Dispose()
     {
