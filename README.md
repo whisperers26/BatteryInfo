@@ -1,10 +1,10 @@
 # BatteryInfo
 
 A personal Windows 11 tray app that shows the battery level of every connected peripheral
-(Razer, Logitech, ROG, HUAWEI FreeClip 2, Betop/Beitong controllers) in one flyout.
+(Razer, Logitech, ROG, HUAWEI FreeClip 2, Betop/Beitong controllers, SteelSeries headsets) in one flyout.
 
-It talks to each device the way the vendor's own software does, so Synapse, G HUB, Armoury Crate
-and BetopGame do not need to be running. It only ever sends read commands: see
+It talks to each device the way the vendor's own software does, so Synapse, G HUB, Armoury Crate,
+BetopGame and SteelSeries GG do not need to be running. It only ever sends read commands: see
 [docs/protocols](docs/protocols/README.md).
 
 ## Supported devices
@@ -16,6 +16,7 @@ and BetopGame do not need to be running. It only ever sends read commands: see
 | HUAWEI | FreeBuds/FreeClip earbuds over Bluetooth, e.g. FreeClip 2 (left/right/case) | HUAWEI serial protocol over RFCOMM; Windows' own (approximate) value as a fallback |
 | Betop (Beitong) | 2.4 GHz controllers with plain-byte dongles, e.g. KP70C2 (also KP20/KP40/KP50/KP70 variants, untested) | Betop vendor report `02 15` |
 | Razer | Basilisk V3 Pro 35K on its HyperSpeed dongle or cable (not yet tested on hardware) | Razer 90-byte feature report `07/80`, `07/84` |
+| SteelSeries | Arctis Nova 5X (and Nova 5, untested) through its wireless base station | SteelSeries status report `00 B0` |
 
 ## Install and run
 
