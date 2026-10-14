@@ -1,12 +1,16 @@
 using BatteryInfo.Core.Diagnostics;
 using BatteryInfo.Core.Monitoring;
+using BatteryInfo.Core.Vendors.Logitech;
 
 namespace BatteryInfo.Core;
 
 /// <summary>Creates the vendor providers the app and the CLI run, backed by the real Windows APIs.</summary>
 public static class ProviderFactory
 {
-    private static readonly Func<IBatteryProvider>[] Factories = [];
+    private static readonly Func<IBatteryProvider>[] Factories =
+    [
+        () => new LogitechBatteryProvider(),
+    ];
 
     public static IReadOnlyList<IBatteryProvider> CreateAll() => Create(Factories);
 
