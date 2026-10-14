@@ -132,14 +132,37 @@ public sealed class BatteryMonitorTests : IAsyncDisposable
     [Fact]
     public async Task Provider_exceeding_the_timeout_is_marked_failed()
     {
+        // On the manual clock the timeout fires only when the test moves time, after the other provider has answered.
+        // A real 100 ms timeout could also expire for the provider that answers at once when the thread pool is busy.
+        _store.Apply("HUAWEI", [new("huawei:1", "HUAWEI", "HUAWEI FreeClip 2", DeviceKind.Earbuds, DeviceStatus.Online,
+            [BatteryComponent.Single(70, ChargeState.Discharging)], _time.GetUtcNow(), "fake")]);
         var hung = new FakeProvider("HUAWEI", _ => new TaskCompletionSource<IReadOnlyList<DeviceReading>>().Task);
         var fine = new FakeProvider("Betop");
-        var monitor = Monitor(TimeProvider.System, TimeSpan.FromMilliseconds(100), hung, fine);
+        var monitor = Monitor(timeout: TimeSpan.FromSeconds(15), providers: [hung, fine]);
 
-        await monitor.Start().WaitAsync(WaitLimit);
+        var poll = monitor.Start();
+        await WaitUntil(() => _store.Snapshot().Any(s => s.Latest.Vendor == "Betop"));
+        var waited = System.Diagnostics.Stopwatch.StartNew();
+        while (!poll.IsCompleted && waited.Elapsed < WaitLimit)
+        {
+            _time.Advance(TimeSpan.FromSeconds(1));
+            await Task.Delay(10);
+        }
+        await poll.WaitAsync(WaitLimit);
 
         Assert.Single(_store.Snapshot(), s => s.Latest.Vendor == "Betop");
+        Assert.Equal("Timed out reading devices.", Assert.Single(_store.Snapshot(), s => s.Latest.Vendor == "HUAWEI").Latest.Detail);
         Assert.Equal(1, hung.Polls);
+    }
+
+    private static async Task WaitUntil(Func<bool> condition)
+    {
+        var waited = System.Diagnostics.Stopwatch.StartNew();
+        while (!condition())
+        {
+            Assert.True(waited.Elapsed < WaitLimit, "condition not met in time");
+            await Task.Delay(5);
+        }
     }
 
     [Fact]
