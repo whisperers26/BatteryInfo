@@ -141,7 +141,7 @@ public sealed class DeviceViewModel : ObservableObject
         var latest = state.Latest;
         var lines = new List<string> { $"{latest.Vendor} · read via {latest.Source}" };
         if (state.BatteryTimestamp is { } readAt) lines.Add($"Battery read {RelativeTime.Format(readAt, now)}");
-        if (shownReading?.Approximate == true) lines.Add("Windows' own value, which can be about 5 points high");
+        if (shownReading is not null && DeviceText.ApproximateNote(shownReading) is { } note) lines.Add(note);
         if (latest.Detail is { Length: > 0 } detail && !lines.Contains(detail)) lines.Add(detail);
         lines.Add("Click for the 7-day history");
         return string.Join('\n', lines);

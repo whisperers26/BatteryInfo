@@ -68,6 +68,13 @@ public class DeviceTextTests
     }
 
     [Fact]
+    public void Approximate_note_warns_that_windows_values_run_high()
+    {
+        Assert.Equal("Windows' own value, which can be about 5 points high", DeviceText.ApproximateNote(WindowsEarbuds(80)));
+        Assert.Null(DeviceText.ApproximateNote(Mouse(DeviceStatus.Online, 56)));
+    }
+
+    [Fact]
     public void Online_with_a_detail_shows_the_detail()
     {
         Assert.Equal("Timed out reading devices.",
