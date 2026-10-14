@@ -49,6 +49,10 @@ of that build first. A local build does not update itself.
   per discharge, when a device that is not charging reaches the level.
 - Settings, history (kept 90 days), logs and the low-battery alerts already shown are in
   `%LOCALAPPDATA%\BatteryInfo`. The alerts are kept so that restarting the app does not repeat them.
+- Updates come from this repository's releases. With **Update automatically** on (the default), the app
+  checks a minute after it starts and every six hours, downloads a new version in the background and installs
+  it the next time it starts; a notification says when one is ready. **Check for updates** in the flyout or the
+  tray menu checks now, and **Restart to update** installs a downloaded version right away.
 - `BatteryInfo.exe --demo` shows sample devices in every state; `--theme=light|dark` overrides the Windows theme.
 - In the demo, Start with Windows only flips the switch: it is not saved and does not change what starts at sign-in.
 
