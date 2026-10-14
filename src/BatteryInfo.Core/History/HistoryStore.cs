@@ -26,6 +26,7 @@ public sealed class HistoryStore(string directory, TimeProvider time)
 
     private readonly object _gate = new();
     private Dictionary<string, HistoryRecord>? _lastWritten;
+    private DateOnly? _prunedOn;
 
     public string Directory { get; } = directory;
 
@@ -73,9 +74,11 @@ public sealed class HistoryStore(string directory, TimeProvider time)
     /// <summary>Deletes the month files whose whole month lies more than <paramref name="keep"/> in the past.</summary>
     public void Prune(TimeSpan keep)
     {
-        var cutoff = time.GetUtcNow() - keep;
+        var now = time.GetUtcNow();
+        var cutoff = now - keep;
         lock (_gate)
         {
+            _prunedOn = DateOnly.FromDateTime(now.UtcDateTime);
             foreach (var (path, month) in MonthFiles())
             {
                 if (month.AddMonths(1) > cutoff) continue;
@@ -89,6 +92,17 @@ public sealed class HistoryStore(string directory, TimeProvider time)
                     Log.Warn($"Could not delete old history file {path}: {e.Message}");
                 }
             }
+        }
+    }
+
+    /// <summary>Runs <see cref="Prune"/> unless it already ran on this UTC day, so a process that stays up for weeks
+    /// (the PC sleeps instead of shutting down) still deletes the months that age out while it runs.</summary>
+    public void PruneDaily(TimeSpan keep)
+    {
+        lock (_gate)
+        {
+            if (_prunedOn == DateOnly.FromDateTime(time.GetUtcNow().UtcDateTime)) return;
+            Prune(keep);
         }
     }
 
