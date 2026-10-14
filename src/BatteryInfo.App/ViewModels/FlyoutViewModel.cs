@@ -27,6 +27,7 @@ public sealed class FlyoutViewModel : ObservableObject
     private bool _startWithWindows;
     private bool _isOpen;
     private bool _autoUpdate;
+    private bool _trayShowsLevel;
     private bool _settingsExpanded;
     private UpdateDescription _update = UpdateText.Describe(new UpdateStatus(UpdateState.Idle, null));
     private readonly RelayCommand _updateCommand;
@@ -38,6 +39,7 @@ public sealed class FlyoutViewModel : ObservableObject
         _notificationsEnabled = settings.NotificationsEnabled;
         _startWithWindows = services.IsStartWithWindowsEnabled();
         _autoUpdate = settings.AutoUpdate;
+        _trayShowsLevel = settings.TrayShowsLevel;
         _refreshCommand = new RelayCommand(() => _ = RefreshAsync(), () => !IsRefreshing);
         _updateCommand = new RelayCommand(services.RunUpdateAction, () => _update.ActionEnabled);
         ToggleSettingsCommand = new RelayCommand(() => SettingsExpanded = !SettingsExpanded);
@@ -105,6 +107,16 @@ public sealed class FlyoutViewModel : ObservableObject
         set
         {
             if (SetProperty(ref _autoUpdate, value)) _services.SetAutoUpdate(value);
+        }
+    }
+
+    /// <summary>The tray icon shows the first device's level; off, it always shows a full battery.</summary>
+    public bool TrayShowsLevel
+    {
+        get => _trayShowsLevel;
+        set
+        {
+            if (SetProperty(ref _trayShowsLevel, value)) _services.SetTrayShowsLevel(value);
         }
     }
 

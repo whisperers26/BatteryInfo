@@ -23,6 +23,9 @@ public interface IFlyoutServices
 
     void SetAutoUpdate(bool enabled);
 
+    /// <summary>Whether the tray icon shows the first device's level.</summary>
+    void SetTrayShowsLevel(bool enabled);
+
     /// <summary>The shown devices were dragged into this order.</summary>
     void SetDeviceOrder(IReadOnlyList<string> shown);
 

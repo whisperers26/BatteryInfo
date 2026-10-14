@@ -3,7 +3,7 @@ using BatteryInfo.Core.History;
 
 namespace BatteryInfo.Core.Tests.Fakes;
 
-/// <summary>Flyout services that do nothing but remember the device order they were given: for view-model tests.</summary>
+/// <summary>Flyout services that do nothing but remember the device order and tray setting they were given: for view-model tests.</summary>
 internal sealed class FakeFlyoutServices : IFlyoutServices
 {
     public DateTimeOffset Now => DateTimeOffset.UnixEpoch;
@@ -29,6 +29,10 @@ internal sealed class FakeFlyoutServices : IFlyoutServices
     public void SetAutoUpdate(bool enabled)
     {
     }
+
+    public bool? TrayShowsLevel { get; private set; }
+
+    public void SetTrayShowsLevel(bool enabled) => TrayShowsLevel = enabled;
 
     public void RunUpdateAction()
     {
