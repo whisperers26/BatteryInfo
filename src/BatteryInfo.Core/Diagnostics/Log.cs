@@ -10,6 +10,7 @@ public static class Log
     private static readonly TimeSpan Keep = TimeSpan.FromDays(7);
     private static string? _directory;
     private static TimeProvider _time = TimeProvider.System;
+    private static DateOnly? _cleanedOn;
 
     public static bool TraceFrames { get; private set; }
 
@@ -25,6 +26,7 @@ public static class Log
             _directory = directory;
             TraceFrames = traceFrames;
             _time = time ?? TimeProvider.System;
+            _cleanedOn = DateOnly.FromDateTime(_time.GetLocalNow().DateTime);
         }
         if (directory is null) return;
 
@@ -85,6 +87,13 @@ public static class Log
         {
             if (_directory is not null)
             {
+                // The app can run for weeks (sleep, not shut down), so the cleanup also runs on each new day's file.
+                var today = DateOnly.FromDateTime(now.DateTime);
+                if (today != _cleanedOn)
+                {
+                    _cleanedOn = today;
+                    DeleteOldFiles(_directory);
+                }
                 try
                 {
                     var path = Path.Combine(_directory, $"batteryinfo-{now:yyyyMMdd}.log");
