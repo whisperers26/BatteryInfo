@@ -15,10 +15,19 @@ internal static class TrayIconRenderer
 
     private static readonly FontFamily IconFont = new("Segoe Fluent Icons, Segoe MDL2 Assets");
 
-    /// <summary>The small-icon size the notification area uses at the system DPI (16 px at 100 %).</summary>
+    /// <summary>The small-icon size the notification area uses now (16 px at 100 %): at the current DPI of the
+    /// taskbar's monitor. The system DPI would not do: it is fixed for the life of the process, so it misses a
+    /// change of the display scale.</summary>
     public static int TraySize()
     {
-        var size = NativeMethods.GetSystemMetricsForDpi(NativeMethods.SmCxSmIcon, NativeMethods.GetDpiForSystem());
+        var taskbar = NativeMethods.FindWindow("Shell_TrayWnd", null);
+        var monitor = taskbar != IntPtr.Zero
+            ? NativeMethods.MonitorFromWindow(taskbar, NativeMethods.MonitorDefaultToPrimary)
+            : NativeMethods.MonitorFromPoint(default, NativeMethods.MonitorDefaultToPrimary);
+        var dpi = NativeMethods.GetDpiForMonitor(monitor, NativeMethods.MdtEffectiveDpi, out var dpiX, out _) == 0
+            ? dpiX
+            : NativeMethods.GetDpiForSystem();
+        var size = NativeMethods.GetSystemMetricsForDpi(NativeMethods.SmCxSmIcon, dpi);
         return size > 0 ? size : 16;
     }
 

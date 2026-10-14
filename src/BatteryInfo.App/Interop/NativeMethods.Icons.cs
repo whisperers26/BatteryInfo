@@ -15,4 +15,10 @@ internal static partial class NativeMethods
 
     [DllImport("user32.dll")]
     public static extern uint GetDpiForSystem();
+
+    [DllImport("user32.dll", CharSet = CharSet.Unicode)]
+    public static extern IntPtr FindWindow(string? className, string? windowName);
+
+    [DllImport("user32.dll")]
+    public static extern IntPtr MonitorFromWindow(IntPtr hwnd, uint flags);
 }

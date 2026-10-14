@@ -14,7 +14,8 @@ internal sealed class TrayIconHost : IDisposable
     private readonly ToolStripMenuItem _startWithWindows;
     private readonly System.Windows.Threading.Dispatcher _dispatcher;
     private System.Drawing.Icon? _image;
-    private bool? _lightTaskbar;
+    private bool _lightTaskbar;
+    private int _imageSize;
 
     public TrayIconHost(System.Windows.Threading.Dispatcher dispatcher)
     {
@@ -83,13 +84,16 @@ internal sealed class TrayIconHost : IDisposable
     private void OnUserPreferenceChanged(object sender, UserPreferenceChangedEventArgs e) =>
         _dispatcher.BeginInvoke(UpdateIcon);
 
+    // Drawn at the exact size the shell shows, so it never resamples the glyph's whole-pixel strokes.
     private void UpdateIcon()
     {
         var light = TaskbarTheme.IsLight();
-        if (_lightTaskbar == light && _image is not null) return;
+        var size = TrayIconRenderer.TraySize();
+        if (_image is not null && _lightTaskbar == light && _imageSize == size) return;
         _lightTaskbar = light;
+        _imageSize = size;
         var previous = _image;
-        _image = TrayIconRenderer.Render(TrayIconRenderer.BatteryGlyph, light, TrayIconRenderer.TraySize());
+        _image = TrayIconRenderer.Render(TrayIconRenderer.BatteryGlyph, light, size);
         _icon.Icon = _image;
         previous?.Dispose();
     }
