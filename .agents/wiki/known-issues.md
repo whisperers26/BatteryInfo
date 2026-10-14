@@ -29,6 +29,8 @@ owner's hardware. Back to [AGENTS.md](../../AGENTS.md). Remove an entry once it 
   exits without showing that copy's flyout, because the elevated copy's objects refuse to be signalled
   by a non-elevated launch. Tested on objects given an elevated token's access rules, not on a real
   elevated copy.
+- **Updating with publish.ps1**: the running tray app closing on its exit event and removing its icon.
+  The event is unit-tested and the script was run against a stand-in process, not the real tray app.
 
 ## Open questions
 

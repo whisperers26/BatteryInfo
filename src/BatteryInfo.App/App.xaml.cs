@@ -125,6 +125,12 @@ public partial class App : Application, IFlyoutServices
             Enabled = _settings.NotificationsEnabled,
         };
         _instance?.ListenForShowRequests(() => Dispatcher.BeginInvoke(ShowFlyout));
+        // publish.ps1 asks before it replaces this copy: shutting down here lets OnExit remove the tray icon.
+        _instance?.ListenForExitRequests(() =>
+        {
+            Log.Info("Exit requested by another process");
+            Dispatcher.BeginInvoke(() => Shutdown());
+        });
 
         SystemEvents.PowerModeChanged += OnPowerModeChanged;
         ApplySnapshot(store.Snapshot());
