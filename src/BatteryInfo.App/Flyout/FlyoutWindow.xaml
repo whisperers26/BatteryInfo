@@ -279,11 +279,11 @@
                     </StackPanel.Style>
                     <TextBlock Text="&#xE83F;" FontFamily="{StaticResource IconFont}" FontSize="28" HorizontalAlignment="Center"
                                Foreground="{DynamicResource TextFillColorSecondaryBrush}" />
-                    <TextBlock Text="No devices found yet" FontSize="14" FontWeight="SemiBold" Margin="0,10,0,4"
+                    <TextBlock Text="No devices connected" FontSize="14" FontWeight="SemiBold" Margin="0,10,0,4"
                                HorizontalAlignment="Center" />
                     <TextBlock FontSize="12" TextWrapping="Wrap" TextAlignment="Center"
                                Foreground="{DynamicResource TextFillColorSecondaryBrush}"
-                               Text="Logitech, ROG, Razer, Betop and HUAWEI FreeClip devices show up here once they are connected." />
+                               Text="Logitech, ROG, Razer, Betop and HUAWEI FreeClip devices show up here while they are connected and awake." />
                 </StackPanel>
             </StackPanel>
         </ScrollViewer>

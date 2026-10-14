@@ -231,8 +231,10 @@ public partial class App : Application, IFlyoutServices
 
     private void ApplySnapshot(IReadOnlyList<DeviceState> snapshot)
     {
-        _tray?.SetTooltip(TrayTooltip.Build(snapshot));
-        _flyoutViewModel?.Update(snapshot, _monitor?.LastRefresh);
+        // Only connected devices are listed; history and alerts still see every device.
+        var connected = ConnectedDevices.Filter(snapshot);
+        _tray?.SetTooltip(TrayTooltip.Build(connected));
+        _flyoutViewModel?.Update(connected, _monitor?.LastRefresh);
         _notifier?.Process(snapshot);
     }
 
