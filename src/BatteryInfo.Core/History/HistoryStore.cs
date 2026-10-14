@@ -104,7 +104,7 @@ public sealed class HistoryStore(string directory, TimeProvider time)
             {
                 if (component.Percent is null) continue;
                 var record = new HistoryRecord(reading.Timestamp, reading.DeviceId, reading.Name, reading.Vendor,
-                    reading.Kind, component.Name, component.Percent, component.Charge, reading.Status);
+                    reading.Kind, component.Name, component.Percent, component.Charge, reading.Status, reading.Approximate);
                 var key = Key(record);
                 if (lastWritten.TryGetValue(key, out var previous) && !ShouldWrite(previous, record)) continue;
                 lastWritten[key] = record;
@@ -116,7 +116,7 @@ public sealed class HistoryStore(string directory, TimeProvider time)
     private static bool ShouldWrite(HistoryRecord previous, HistoryRecord record) =>
         record.Time > previous.Time &&
         (record.Percent != previous.Percent || record.Charge != previous.Charge || record.Status != previous.Status ||
-         record.Time - previous.Time >= Heartbeat);
+         record.Approximate != previous.Approximate || record.Time - previous.Time >= Heartbeat);
 
     private static string Key(HistoryRecord record) => $"{record.DeviceId}\n{record.Component}";
 

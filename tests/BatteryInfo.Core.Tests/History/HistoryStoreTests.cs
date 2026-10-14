@@ -18,10 +18,11 @@ public sealed class HistoryStoreTests : IDisposable
     private HistoryStore NewStore() => new(_directory, _time);
 
     private DeviceState Mouse(int? percent, ChargeState charge = ChargeState.Discharging,
-        DeviceStatus status = DeviceStatus.Online, DateTimeOffset? at = null)
+        DeviceStatus status = DeviceStatus.Online, DateTimeOffset? at = null, bool approximate = false)
     {
         var reading = new DeviceReading("logitech:B4655832", "Logitech", "PRO X2 SUPERSTRIKE", DeviceKind.Mouse, status,
-            percent is null ? [] : [BatteryComponent.Single(percent, charge)], at ?? _time.GetUtcNow(), "HID++ 0x1004");
+            percent is null ? [] : [BatteryComponent.Single(percent, charge)], at ?? _time.GetUtcNow(), "HID++ 0x1004",
+            approximate);
         return new DeviceState(reading, reading.HasBattery ? reading : null);
     }
 
@@ -117,6 +118,40 @@ public sealed class HistoryStoreTests : IDisposable
 
         Assert.Equal([56, 55, 55], AllMouse(store).Select(r => r.Percent!.Value));
         Assert.Equal(ChargeState.Charging, AllMouse(store)[2].Charge);
+    }
+
+    [Fact]
+    public void An_approximate_value_is_recorded_as_approximate()
+    {
+        NewStore().Append([Mouse(56, approximate: true)]);
+
+        Assert.True(Assert.Single(AllMouse(NewStore())).Approximate);
+    }
+
+    [Fact]
+    public void A_switch_between_an_exact_and_an_approximate_value_is_written_at_once()
+    {
+        var store = NewStore();
+
+        store.Append([Mouse(56)]);
+        _time.Advance(TimeSpan.FromMinutes(2));
+        store.Append([Mouse(56, approximate: true)]);
+
+        Assert.Equal([false, true], AllMouse(store).Select(r => r.Approximate));
+    }
+
+    [Fact]
+    public void Lines_written_without_the_approximate_flag_read_as_exact()
+    {
+        Directory.CreateDirectory(_directory);
+        File.WriteAllText(Path.Combine(_directory, "2026-10.jsonl"),
+            "{\"time\":\"2026-10-14T12:00:00+00:00\",\"deviceId\":\"logitech:B4655832\",\"deviceName\":\"PRO X2 SUPERSTRIKE\"," +
+            "\"vendor\":\"Logitech\",\"kind\":\"Mouse\",\"component\":\"\",\"percent\":56,\"charge\":\"Discharging\",\"status\":\"Online\"}\n");
+
+        var record = Assert.Single(AllMouse(NewStore()));
+
+        Assert.Equal(56, record.Percent);
+        Assert.False(record.Approximate);
     }
 
     [Fact]
