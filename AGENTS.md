@@ -30,6 +30,7 @@ dotnet build BatteryInfo.slnx
 dotnet test BatteryInfo.slnx
 dotnet run --project src/BatteryInfo.Cli -- list --trace      # read every device once, frames on stderr
 dotnet run --project src/BatteryInfo.Cli -- hid               # HID collections on this PC
+dotnet run --project src/BatteryInfo.App -- --demo           # tray app with sample devices (own data folder)
 powershell -File scripts/publish.ps1 -Start                   # install to %LOCALAPPDATA%\Programs\BatteryInfo
 ```
 

@@ -17,6 +17,28 @@ and BetopGame do not need to be running. It only ever sends read commands: see
 | Betop (Beitong) | 2.4 GHz controllers with plain-byte dongles, e.g. KP70C2 (also KP20/KP40/KP50/KP70 variants, untested) | Betop vendor report `02 15` |
 | Razer | Basilisk V3 Pro 35K on its HyperSpeed dongle or cable (not yet tested on hardware) | Razer 90-byte feature report `07/80`, `07/84` |
 
+## Install and run
+
+Needs the .NET 10 Desktop Runtime.
+
+```
+powershell -File scripts/publish.ps1 -Start
+```
+
+This publishes the app to `%LOCALAPPDATA%\Programs\BatteryInfo` and starts it in the tray. Turn on
+**Start with Windows** in the flyout (or the tray menu) to launch it at sign-in.
+
+## Using the tray app
+
+- Click the battery icon in the tray for the flyout; right-click it for Refresh, Start with Windows and Exit.
+  Hovering shows every device's level in the tooltip.
+- Each row shows the level and whether the device is charging, asleep (with its last known level) or
+  not connected. Earbuds show left, right and case. Click a row for its last 7 days.
+- The footer sets the low-battery alert level (10-30 %) and turns the alerts on or off. An alert fires once
+  per discharge, when a device that is not charging reaches the level.
+- Settings, history (kept 90 days) and logs are in `%LOCALAPPDATA%\BatteryInfo`.
+- `BatteryInfo.exe --demo` shows sample devices in every state; `--theme=light|dark` overrides the Windows theme.
+
 ## Command line
 
 ```
