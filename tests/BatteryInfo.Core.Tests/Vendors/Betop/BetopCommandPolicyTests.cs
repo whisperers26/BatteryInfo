@@ -111,9 +111,15 @@ public class BetopCommandPolicyTests
     [Theory]
     [InlineData(0x5126)] // KP20A: SetHidWriteEnc 1, would see a substituted command
     [InlineData(0x5154)] // KP40D-b1: SetHidWriteEnc 1
+    [InlineData(0x5161)] // PG01A: another vendor collection (UP FF80 / U 1), never probed
+    [InlineData(0x5162)]
     [InlineData(0x1234)]
     public void Pids_outside_the_plain_byte_table_are_refused(ushort pid) =>
         Assert.False(_policy.IsAllowed(Device(pid: pid), Frame(0x02, 0x15)));
+
+    [Fact]
+    public void The_PG01A_vendor_collection_is_refused() =>
+        Assert.False(_policy.IsAllowed(Device(pid: 0x5162, usagePage: 0xFF80, usage: 0x0001), Frame(0x02, 0x15)));
 
     [Fact]
     public void Non_vendor_collections_of_the_dongle_are_refused()

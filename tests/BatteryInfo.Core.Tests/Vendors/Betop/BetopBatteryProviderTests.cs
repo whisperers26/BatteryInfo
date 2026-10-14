@@ -241,6 +241,18 @@ public class BetopBatteryProviderTests
     }
 
     [Fact]
+    public void A_PG01A_dongle_is_not_reported_and_never_opened()
+    {
+        // pgv1.js: RegisterDev2(0x20bc, 0x5162, 0xff80, 0x1, -1, 64). Not the collection verified on the KP70C2.
+        var pg01a = _fake.Add(0x20BC, 0x5162, 0xFF80, 0x0001, 64, 64, mi: 1, outputReportId: 0x02);
+        ReplyWith(pg01a, Reply91);
+
+        Assert.Empty(Poll(Provider()));
+
+        Assert.Empty(pg01a.Opens);
+    }
+
+    [Fact]
     public void No_devices_no_readings() => Assert.Empty(Poll(Provider()));
 
     [Fact]

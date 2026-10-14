@@ -23,7 +23,8 @@ public static class BetopModels
     public const ushort AsleepVendorId = 0x20DD;
 
     // Models with SetHidWriteEnc 1 (KP20A, KP40A, KP40B, KP40D-b1, KP40F) substitute every outgoing byte through a
-    // table, so a plain request would reach them as a different command. They are deliberately absent.
+    // table, so a plain request would reach them as a different command. They are deliberately absent. So is PG01A
+    // (5161/5162): pgv1.js registers its collections as UP 0xFF80 / U 0x1, not the UP 0x00FF / U 0x3 verified here.
     public static IReadOnlyList<BetopModel> All { get; } =
     [
         new("KP20D", 0x5158, 0x5159),
@@ -42,7 +43,6 @@ public static class BetopModels
         new("KP70C", 0x5173, 0x5174),
         new("KP70C1", 0x518A, 0x518B),
         new("KP70C2", 0x518C, 0x518D),
-        new("PG01A", 0x5161, 0x5162),
     ];
 
     /// <summary>The model with this wired or dongle PID, or null.</summary>

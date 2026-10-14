@@ -35,7 +35,6 @@ public class BetopModelsTests
     [InlineData(0x515F, "KP70B")]
     [InlineData(0x5174, "KP70C")]
     [InlineData(0x518A, "KP70C1")]
-    [InlineData(0x5162, "PG01A")]
     public void Plain_byte_siblings_are_in_the_table(ushort pid, string name) =>
         Assert.Equal(name, BetopModels.FindByProductId(pid)?.Name);
 
@@ -59,12 +58,20 @@ public class BetopModelsTests
     public void Byte_substituting_models_and_unknown_pids_are_not_in_the_table(ushort pid) =>
         Assert.Null(BetopModels.FindByProductId(pid));
 
+    // pgv1.js registers PG01A's collections as UP 0xFF80 / U 0x1, not the UP 0x00FF / U 0x3 verified on the KP70C2,
+    // and it was never probed. Left out rather than reported as a permanent error.
+    [Theory]
+    [InlineData(0x5161)]
+    [InlineData(0x5162)]
+    public void PG01A_with_its_other_vendor_collection_is_not_in_the_table(ushort pid) =>
+        Assert.Null(BetopModels.FindByProductId(pid));
+
     [Fact]
     public void Every_pid_belongs_to_one_model()
     {
         var pids = BetopModels.All.SelectMany(m => new[] { m.WiredProductId, m.DongleProductId }).ToList();
 
-        Assert.Equal(17, BetopModels.All.Count);
+        Assert.Equal(16, BetopModels.All.Count);
         Assert.Equal(pids.Count, pids.Distinct().Count());
     }
 
