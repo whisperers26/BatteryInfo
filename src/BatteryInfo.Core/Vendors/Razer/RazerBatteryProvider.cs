@@ -106,6 +106,15 @@ public sealed class RazerBatteryProvider : IBatteryProvider
     {
         using var connection = new GuardedHidConnection(_hid.Open(device, HidAccess.None), Policy);
 
+        if (link == RazerLink.Dongle)
+        {
+            // The dongle answers 00/BF itself, so an unlinked mouse is known without waiting out 07/xx timeouts.
+            // Optional: anything but a clear "not linked" goes on to the battery queries.
+            var links = Exchange(connection, RazerProtocol.WirelessStatusRequest(model.TransactionId), ct);
+            if (links.Outcome == RazerReplyKind.Success && IsUnlinked(model, RazerProtocol.ParseWirelessStatus(links.Reply)))
+                return Reading(model, DeviceStatus.Asleep, detail: "Not connected to its dongle (off or out of range)");
+        }
+
         var charging = Exchange(connection, RazerProtocol.ChargingStatusRequest(model.TransactionId), ct);
         // A mouse that does not answer 07/84 will not answer 07/80 either; a rejected 07/84 only loses the state.
         if (charging.Outcome is RazerReplyKind.NoResponse or RazerReplyKind.Pending) return NotAnswered(model, charging.Outcome);
@@ -115,6 +124,13 @@ public sealed class RazerBatteryProvider : IBatteryProvider
         if (battery.Outcome is not RazerReplyKind.Success) return NotAnswered(model, battery.Outcome);
 
         return Reading(model, DeviceStatus.Online, [BatteryComponent.Single(RazerProtocol.ParseBatteryPercent(battery.Reply), charge)]);
+    }
+
+    // The table lists this model's slot (seen as 02 | 00 00 D7 | 00 FF FF) and that slot is not linked.
+    private static bool IsUnlinked(RazerModel model, IReadOnlyList<RazerLinkSlot> slots)
+    {
+        var ours = slots.Where(s => s.ProductId == model.DonglePid || s.ProductId == model.WiredPid).ToList();
+        return ours.Count > 0 && !ours.Any(s => s.Linked);
     }
 
     /// <summary>Sends <paramref name="request"/> and polls the mailbox until our reply settles. Busy, new, foreign

@@ -113,6 +113,63 @@ public class RazerBatteryProviderTests
     }
 
     [Fact]
+    public void Dongle_is_asked_for_its_link_table_before_charging_and_level()
+    {
+        var dongle = Dongle();
+
+        Assert.Equal(DeviceStatus.Online, PollOne().Status);
+
+        Assert.Equal([0xBF, 0x84, 0x80], dongle.SentIds);
+        Assert.Equal(RazerProtocol.WirelessStatusRequest(), dongle.Device.FeaturesSet[0]);
+    }
+
+    [Fact]
+    public void Unlinked_mouse_is_asleep_and_no_07_command_is_sent()
+    {
+        var dongle = Dongle();
+        dongle.LinkSlots = [0x02, 0x00, 0x00, 0xD7, 0x00, 0xFF, 0xFF]; // slot 1 (00D7) not linked
+
+        var reading = PollOne();
+
+        Assert.Equal("razer:00D6", reading.DeviceId);
+        Assert.Equal(DeviceStatus.Asleep, reading.Status);
+        Assert.Empty(reading.Components);
+        Assert.Contains("dongle", reading.Detail, StringComparison.OrdinalIgnoreCase);
+        Assert.Equal([0xBF], dongle.SentIds);
+    }
+
+    [Fact]
+    public void Link_table_that_does_not_list_this_mouse_does_not_decide_anything()
+    {
+        var dongle = Dongle();
+        dongle.LinkSlots = [0x01, 0x00, 0x00, 0x99];
+
+        Assert.Equal(DeviceStatus.Online, PollOne().Status);
+        Assert.Equal([0xBF, 0x84, 0x80], dongle.SentIds);
+    }
+
+    [Fact]
+    public void Unsupported_link_query_still_reads_the_battery()
+    {
+        var dongle = Dongle();
+        dongle.Script(0xBF, Replies.NotSupported);
+
+        Assert.Equal(DeviceStatus.Online, PollOne().Status);
+        Assert.Equal([0xBF, 0x84, 0x80], dongle.SentIds);
+    }
+
+    [Fact]
+    public void Unanswered_link_query_still_reads_the_battery()
+    {
+        var dongle = Dongle();
+        dongle.ScriptEvery(0xBF, 3, Replies.NoResponse);
+
+        Assert.Equal(DeviceStatus.Online, PollOne().Status);
+        Assert.Equal(1, dongle.SentCount(0x84));
+        Assert.Equal(1, dongle.SentCount(0x80));
+    }
+
+    [Fact]
     public void Cable_is_preferred_when_cable_and_dongle_are_both_present()
     {
         var dongle = Dongle();
