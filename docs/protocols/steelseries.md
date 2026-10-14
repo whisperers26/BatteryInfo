@@ -40,8 +40,8 @@ A 65-byte input report. Offsets below are as Windows ReadFile returns them, repo
 | 0 | report id `00` |
 | 1 | `B0`, echo of the command |
 | 2 | link: `02` = headset off or out of range; anything else = connected |
-| 4 | battery percent, 0 to 100 |
 | 3 | unknown; `02` seen live |
+| 4 | battery percent, 0 to 100 |
 | 5 | `01` = charging (HeadsetControl); `03` seen live on battery; anything else = not charging |
 | 6, 7 | ChatMix game / chat volume (not used) |
 
