@@ -143,7 +143,7 @@ public sealed class DeviceViewModel : ObservableObject
         if (state.BatteryTimestamp is { } readAt) lines.Add($"Battery read {RelativeTime.Format(readAt, now)}");
         if (shownReading is not null && DeviceText.ApproximateNote(shownReading) is { } note) lines.Add(note);
         if (latest.Detail is { Length: > 0 } detail && !lines.Contains(detail)) lines.Add(detail);
-        lines.Add("Click for the 7-day history");
+        lines.Add("Click for the 7-day history, drag to reorder");
         return string.Join('\n', lines);
     }
 }

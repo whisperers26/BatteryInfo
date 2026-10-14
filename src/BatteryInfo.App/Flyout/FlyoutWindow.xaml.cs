@@ -16,6 +16,9 @@ public partial class FlyoutWindow : Window
     private long _hiddenAt;
     private bool _closingForExit;
     private IntPtr _foregroundHook;
+    private DeviceViewModel? _pressedRow;
+    private Point _pressedAt;
+    private bool _dragging;
     private NativeMethods.WinEventProc? _foregroundChanged; // kept in a field: Windows calls it while hooked
 
     public FlyoutWindow(FlyoutViewModel viewModel)
@@ -33,7 +36,13 @@ public partial class FlyoutWindow : Window
         {
             if (IsVisible) FlyoutPositioner.Position(this);
         };
+        DeviceList.PreviewMouseLeftButtonDown += OnRowPressed;
+        DeviceList.PreviewMouseMove += OnRowDragged;
+        DeviceList.PreviewMouseLeftButtonUp += OnRowReleased;
+        DeviceList.LostMouseCapture += (_, _) => EndDrag();
     }
+
+    private FlyoutViewModel ViewModel => (FlyoutViewModel)DataContext;
 
     /// <summary>True right after the flyout hid itself, so the tray click that caused it does not reopen it.</summary>
     public bool JustHidden => Environment.TickCount64 - _hiddenAt < ReopenGuard.TotalMilliseconds;
@@ -74,6 +83,64 @@ public partial class FlyoutWindow : Window
         if (_foregroundHook == IntPtr.Zero) return;
         NativeMethods.UnhookWinEvent(_foregroundHook);
         _foregroundHook = IntPtr.Zero;
+    }
+
+    // A press on a row may become a drag once the mouse moves far enough; until then it is an ordinary click.
+    private void OnRowPressed(object sender, MouseButtonEventArgs e)
+    {
+        _pressedRow = e.OriginalSource is DependencyObject source && DeviceList.ContainerFromElement(source) is FrameworkElement row
+            ? row.DataContext as DeviceViewModel
+            : null;
+        _pressedAt = e.GetPosition(DeviceList);
+    }
+
+    // Capturing the mouse takes it from the row's toggle button, so the press no longer counts as a click.
+    private void OnRowDragged(object sender, MouseEventArgs e)
+    {
+        if (_pressedRow is not { } row || e.LeftButton != MouseButtonState.Pressed) return;
+        var at = e.GetPosition(DeviceList);
+        if (!_dragging)
+        {
+            if (Math.Abs(at.Y - _pressedAt.Y) < SystemParameters.MinimumVerticalDragDistance) return;
+            _dragging = true;
+            DeviceList.CaptureMouse();
+            Mouse.OverrideCursor = Cursors.SizeNS;
+        }
+        SetDraggedLook(row, true);
+        ViewModel.MoveDevice(row, DropIndex(row, at.Y));
+    }
+
+    private void OnRowReleased(object sender, MouseButtonEventArgs e)
+    {
+        if (!_dragging) return;
+        e.Handled = true;
+        DeviceList.ReleaseMouseCapture();
+    }
+
+    private void EndDrag()
+    {
+        if (_dragging && _pressedRow is { } row) SetDraggedLook(row, false);
+        _dragging = false;
+        _pressedRow = null;
+        Mouse.OverrideCursor = null;
+    }
+
+    // The dragged row goes below every other row whose middle is above the pointer.
+    private int DropIndex(DeviceViewModel dragged, double y)
+    {
+        var index = 0;
+        foreach (var device in ViewModel.Devices)
+        {
+            if (device == dragged || DeviceList.ItemContainerGenerator.ContainerFromItem(device) is not FrameworkElement row) continue;
+            var top = row.TranslatePoint(new Point(0, 0), DeviceList).Y;
+            if (top + row.ActualHeight / 2 < y) index++;
+        }
+        return index;
+    }
+
+    private void SetDraggedLook(DeviceViewModel device, bool dragged)
+    {
+        if (DeviceList.ItemContainerGenerator.ContainerFromItem(device) is UIElement row) row.Opacity = dragged ? 0.6 : 1;
     }
 
     protected override void OnKeyDown(KeyEventArgs e)

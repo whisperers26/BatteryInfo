@@ -265,7 +265,8 @@
 
         <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled" Focusable="False">
             <StackPanel Margin="8">
-                <ItemsControl ItemsSource="{Binding Devices}" Focusable="False" />
+                <!-- Rows can be dragged up and down; the code-behind moves them. -->
+                <ItemsControl x:Name="DeviceList" ItemsSource="{Binding Devices}" Focusable="False" />
                 <StackPanel x:Name="EmptyState" Margin="24,28">
                     <StackPanel.Style>
                         <Style TargetType="StackPanel">
