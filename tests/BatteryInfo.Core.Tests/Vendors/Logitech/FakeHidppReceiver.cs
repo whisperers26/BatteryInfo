@@ -12,6 +12,9 @@ internal enum FakeLink
     /// <summary>Paired but unreachable: the receiver answers every request with 0x8F error 0x09.</summary>
     Asleep,
 
+    /// <summary>Paired but not connected (switched off): the C54D answers 0x8F error 0x08, as seen live.</summary>
+    Disconnected,
+
     /// <summary>Nothing answers.</summary>
     Silent,
 
@@ -135,6 +138,9 @@ internal sealed class FakeHidppReceiver
                 return;
             case FakeLink.Asleep:
                 ShortError(frame, 0x09);
+                return;
+            case FakeLink.Disconnected:
+                ShortError(frame, 0x08);
                 return;
         }
 

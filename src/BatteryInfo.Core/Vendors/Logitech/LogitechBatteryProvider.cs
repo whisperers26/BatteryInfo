@@ -298,14 +298,14 @@ public sealed class LogitechBatteryProvider : IBatteryProvider
     {
         try
         {
+            // Only slots the receiver lists as paired are pinged, so every receiver error here means the device is not
+            // reachable now: 0x09/0x04 (Solaar, kernel) and 0x08, which the C54D returns for a paired mouse that is
+            // switched off (seen live; the doc only saw 0x08 for empty slots).
             var ping = poll.Channel.Send(HidppProtocol.Ping(known.Index, SoftwareId, NextMark()), _timings.Ping);
             switch (ping.Kind)
             {
                 case HidppMatchKind.None:
                     return Asleep(poll, known, NotResponding);
-                case HidppMatchKind.Hidpp10Error when ping.ErrorCode == HidppProtocol.ErrorUnknownDevice:
-                    Forget(known);
-                    return null;
                 case HidppMatchKind.Hidpp10Error when ping.ErrorCode == HidppProtocol.ErrorInvalidSubId:
                     return ReadHidpp10(poll, known);
                 case HidppMatchKind.Hidpp10Error or HidppMatchKind.Hidpp20Error:

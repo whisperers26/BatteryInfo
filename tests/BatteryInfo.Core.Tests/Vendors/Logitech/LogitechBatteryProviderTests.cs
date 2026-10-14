@@ -118,6 +118,35 @@ public class LogitechBatteryProviderTests
     }
 
     [Fact]
+    public async Task Paired_slot_whose_ping_reports_unknown_device_is_asleep()
+    {
+        // Live on 2026-10-14 13:39 with the mouse off: B5/20 lists slot 1, the ping gets 10 01 8F 00 1C 08 00.
+        _receiver.Pair(1).Link = FakeLink.Disconnected;
+
+        var reading = await PollSingle();
+
+        Assert.Equal("logitech:B4655832", reading.DeviceId);
+        Assert.Equal("PRO X2 SUPERSTRIKE", reading.Name);
+        Assert.Equal(DeviceStatus.Asleep, reading.Status);
+        Assert.Empty(reading.Components);
+    }
+
+    [Fact]
+    public async Task Device_switched_off_after_a_good_poll_keeps_its_cached_identity()
+    {
+        var device = _receiver.Pair(1);
+        device.Wpid = 0x4099;
+        device.Name = "G502 X PLUS";
+        await PollSingle();
+        device.Link = FakeLink.Disconnected;
+
+        var reading = await PollSingle();
+
+        Assert.Equal(DeviceStatus.Asleep, reading.Status);
+        Assert.Equal("G502 X PLUS", reading.Name);
+    }
+
+    [Fact]
     public async Task Asleep_device_of_an_unknown_model_is_named_by_its_codename()
     {
         var device = _receiver.Pair(1);
