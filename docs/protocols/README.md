@@ -10,6 +10,7 @@ reference for one vendor provider in `src/BatteryInfo.Core/Vendors/`.
 | HUAWEI FreeClip 2 | [huawei.md](huawei.md) | yes (L 77 / R 77 / case 100) |
 | Betop / Beitong | [betop.md](betop.md) | yes (KP70C2, 91 %) |
 | Razer | [razer.md](razer.md) | no (dongle unplugged) |
+| SteelSeries Arctis Nova 5 / 5X | [steelseries.md](steelseries.md) | yes (Nova 5X, 45 %) |
 
 Every provider sends only the read/query commands these files allow-list. Several neighbouring
 commands write settings or reboot a device into firmware-update mode; never add one.

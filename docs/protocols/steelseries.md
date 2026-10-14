@@ -41,7 +41,8 @@ A 65-byte input report. Offsets below are as Windows ReadFile returns them, repo
 | 1 | `B0`, echo of the command |
 | 2 | link: `02` = headset off or out of range; anything else = connected |
 | 4 | battery percent, 0 to 100 |
-| 5 | `01` = charging; anything else = not charging |
+| 3 | unknown; `02` seen live |
+| 5 | `01` = charging (HeadsetControl); `03` seen live on battery; anything else = not charging |
 | 6, 7 | ChatMix game / chat volume (not used) |
 
 When byte 2 is `02` the percent is stale and must not be shown.
@@ -63,4 +64,12 @@ headset's flash. None may be sent:
 
 ## 5. Live check
 
-See section "Observed" below; captured with `batteryinfo list --vendor SteelSeries --trace`.
+2026-10-14, Arctis Nova 5X base station on this PC, headset on and on battery, captured with
+`batteryinfo list --vendor SteelSeries --trace` (reply 5 ms after the request):
+
+```text
+>> 00 B0 00 00 ... 00
+<< 00 B0 03 02 2D 03 64 64 00 ... 00      connected, 45 %, not charging, ChatMix 100/100
+```
+
+Not yet seen live: the headset switched off (byte 2 = `02`) and charging (byte 5 = `01`).
