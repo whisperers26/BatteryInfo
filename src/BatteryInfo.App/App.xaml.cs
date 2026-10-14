@@ -1,8 +1,10 @@
 using System.IO;
 using System.Windows;
 using System.Windows.Threading;
+using BatteryInfo.App.Flyout;
 using BatteryInfo.App.Interop;
 using BatteryInfo.App.Tray;
+using BatteryInfo.App.ViewModels;
 using BatteryInfo.Core;
 using BatteryInfo.Core.Diagnostics;
 using BatteryInfo.Core.History;
@@ -14,9 +16,10 @@ using Microsoft.Win32;
 namespace BatteryInfo.App;
 
 /// <summary>Composition root: one tray process that polls the providers, keeps history and shows the flyout.</summary>
-public partial class App : Application
+public partial class App : Application, IFlyoutServices
 {
     private const string InstanceName = "BatteryInfo";
+    private static readonly TimeSpan RefreshOnOpenAfter = TimeSpan.FromSeconds(30);
     private static readonly TimeSpan ProviderTimeout = TimeSpan.FromSeconds(15);
     private static readonly TimeSpan HistoryKeep = TimeSpan.FromDays(90);
     private static readonly TimeSpan ResumeRefreshDelay = TimeSpan.FromSeconds(5);
@@ -30,6 +33,8 @@ public partial class App : Application
     private HistoryStore? _history;
     private BatteryMonitor? _monitor;
     private TrayIconHost? _tray;
+    private FlyoutViewModel? _flyoutViewModel;
+    private FlyoutWindow? _flyout;
 
     // Before WPF or WinForms create any window, so both lay out per monitor.
     static App() => DpiAwarenessSet = NativeMethods.EnablePerMonitorDpiAwareness();
@@ -66,18 +71,23 @@ public partial class App : Application
             TimeSpan.FromSeconds(_settings.PollIntervalSeconds), ProviderTimeout);
         _monitor.SnapshotChanged += OnSnapshotChanged;
 
+        _flyoutViewModel = new FlyoutViewModel(this, _settings);
         _tray = new TrayIconHost(Dispatcher);
+        _tray.LeftClicked += (_, _) => ToggleFlyout();
         _tray.RefreshClicked += (_, _) => _ = _monitor.RefreshAsync();
         _tray.ExitClicked += (_, _) => Shutdown();
+        _instance.ListenForShowRequests(() => Dispatcher.BeginInvoke(ShowFlyout));
 
         SystemEvents.PowerModeChanged += OnPowerModeChanged;
         ApplySnapshot(store.Snapshot());
         _ = _monitor.Start();
+        if (_options.ShowFlyout) Dispatcher.BeginInvoke(DispatcherPriority.ApplicationIdle, ShowFlyout);
     }
 
     protected override void OnExit(ExitEventArgs e)
     {
         SystemEvents.PowerModeChanged -= OnPowerModeChanged;
+        _flyout?.CloseForExit();
         _tray?.Dispose();
         if (_monitor is { } monitor)
         {
@@ -128,7 +138,61 @@ public partial class App : Application
     private void ApplySnapshot(IReadOnlyList<DeviceState> snapshot)
     {
         _tray?.SetTooltip(TrayTooltip.Build(snapshot));
+        _flyoutViewModel?.Update(snapshot, _monitor?.LastRefresh);
     }
+
+    private void ToggleFlyout()
+    {
+        if (_flyout is { IsVisible: true })
+        {
+            _flyout.HideFlyout();
+            return;
+        }
+        if (_flyout?.JustHidden == true) return;
+        ShowFlyout();
+    }
+
+    private void ShowFlyout()
+    {
+        if (_flyoutViewModel is null || _monitor is null) return;
+        _flyout ??= new FlyoutWindow(_flyoutViewModel);
+        _flyoutViewModel.ReloadStartWithWindows();
+        _flyoutViewModel.Rebuild();
+        _flyout.ShowNearTray();
+        if (_monitor.LastRefresh is not { } last || _time.GetUtcNow() - last > RefreshOnOpenAfter)
+        {
+            _flyoutViewModel.RefreshCommand.Execute(null);
+        }
+    }
+
+    private void UpdateSettings(AppSettings settings)
+    {
+        _settings = settings;
+        _settingsStore?.Save(settings);
+        Log.Info($"Settings changed: {settings}");
+    }
+
+    DateTimeOffset IFlyoutServices.Now => _time.GetLocalNow();
+
+    Task IFlyoutServices.RefreshAsync() => _monitor?.RefreshAsync() ?? Task.CompletedTask;
+
+    IReadOnlyList<HistorySeries> IFlyoutServices.LoadHistory(string deviceId, DateTimeOffset since)
+    {
+        if (_history is null) return [];
+        // A gap longer than the heartbeat plus a few polls means the device was not read: break the line there.
+        var maxGap = HistoryStore.Heartbeat + 3 * TimeSpan.FromSeconds(_settings.PollIntervalSeconds);
+        return HistorySeries.Build(_history.Query(deviceId, since), maxGap);
+    }
+
+    bool IFlyoutServices.IsStartWithWindowsEnabled() => false;
+
+    void IFlyoutServices.SetStartWithWindows(bool enabled)
+    {
+    }
+
+    void IFlyoutServices.SetLowBatteryThreshold(int percent) => UpdateSettings(_settings with { LowBatteryThreshold = percent });
+
+    void IFlyoutServices.SetNotificationsEnabled(bool enabled) => UpdateSettings(_settings with { NotificationsEnabled = enabled });
 
     private void OnPowerModeChanged(object sender, PowerModeChangedEventArgs e)
     {
