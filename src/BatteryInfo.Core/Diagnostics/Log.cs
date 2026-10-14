@@ -9,19 +9,22 @@ public static class Log
     private static readonly object Gate = new();
     private static readonly TimeSpan Keep = TimeSpan.FromDays(7);
     private static string? _directory;
+    private static TimeProvider _time = TimeProvider.System;
 
     public static bool TraceFrames { get; private set; }
 
     /// <summary>Raised for every line written (the CLI's --trace and tests listen here).</summary>
     public static event Action<string>? LineWritten;
 
-    /// <summary>Sets where lines go. A null directory keeps lines in memory only (LineWritten).</summary>
-    public static void Configure(string? directory, bool traceFrames)
+    /// <summary>Sets where lines go. A null directory keeps lines in memory only (LineWritten). The clock is the
+    /// system's unless <paramref name="time"/> is given (tests).</summary>
+    public static void Configure(string? directory, bool traceFrames, TimeProvider? time = null)
     {
         lock (Gate)
         {
             _directory = directory;
             TraceFrames = traceFrames;
+            _time = time ?? TimeProvider.System;
         }
         if (directory is null) return;
 
@@ -30,7 +33,7 @@ public static class Log
             Directory.CreateDirectory(directory);
             foreach (var file in Directory.GetFiles(directory, "batteryinfo-*.log"))
             {
-                if (DateTime.UtcNow - File.GetLastWriteTimeUtc(file) > Keep) File.Delete(file);
+                if (_time.GetUtcNow().UtcDateTime - File.GetLastWriteTimeUtc(file) > Keep) File.Delete(file);
             }
         }
         catch (Exception e) when (e is IOException or UnauthorizedAccessException)
@@ -64,7 +67,7 @@ public static class Log
 
     private static void Write(string level, string message)
     {
-        var now = DateTimeOffset.Now;
+        var now = _time.GetLocalNow();
         var line = $"{now.ToString("yyyy-MM-dd'T'HH:mm:ss.fffzzz", CultureInfo.InvariantCulture)} {level} {message}";
         lock (Gate)
         {
