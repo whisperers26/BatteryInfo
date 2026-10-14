@@ -74,4 +74,58 @@ public static class RazerProtocol
 
     public static bool HasValidCrc(ReadOnlySpan<byte> buffer) =>
         buffer.Length == BufferLength && buffer[CrcIndex] == Crc(buffer);
+
+    /// <summary>What a GetFeature buffer says about <paramref name="request"/>. A reply is ours only when its
+    /// txid, class, id and data size match, and for class 0x07 its first argument (the battery id) too; anything
+    /// else in the shared mailbox (Synapse uses txid 0x1F as well) is <see cref="RazerReplyKind.Foreign"/>.</summary>
+    public static RazerReplyKind Classify(ReadOnlySpan<byte> request, ReadOnlySpan<byte> reply)
+    {
+        if (!IsReplyTo(request, reply)) return RazerReplyKind.Foreign;
+        return reply[StatusIndex] switch
+        {
+            0x02 => HasValidCrc(reply) ? RazerReplyKind.Success : RazerReplyKind.BadCrc,
+            0x03 => RazerReplyKind.Failure,
+            0x04 => RazerReplyKind.NoResponse,
+            0x05 => RazerReplyKind.NotSupported,
+            _ => RazerReplyKind.Pending, // 0x00 new, 0x01 busy, or a status this code does not know yet
+        };
+    }
+
+    private static bool IsReplyTo(ReadOnlySpan<byte> request, ReadOnlySpan<byte> reply)
+    {
+        if (request.Length != BufferLength || reply.Length != BufferLength || reply[0] != request[0]) return false;
+        if (reply[TransactionIdIndex] != request[TransactionIdIndex]
+            || reply[ClassIndex] != request[ClassIndex]
+            || reply[IdIndex] != request[IdIndex]
+            || reply[DataSizeIndex] != request[DataSizeIndex])
+        {
+            return false;
+        }
+        return request[ClassIndex] != BatteryClass || reply[ArgumentsIndex] == request[ArgumentsIndex];
+    }
+}
+
+/// <summary>How a GetFeature buffer relates to the request just sent.</summary>
+public enum RazerReplyKind
+{
+    /// <summary>Another command's report in the shared mailbox: keep polling.</summary>
+    Foreign,
+
+    /// <summary>Ours, still new (0x00) or busy (0x01): keep polling, do not resend.</summary>
+    Pending,
+
+    /// <summary>Ours, 0x02 with a valid CRC: parse it.</summary>
+    Success,
+
+    /// <summary>Ours, 0x02 but the CRC does not match: poll again.</summary>
+    BadCrc,
+
+    /// <summary>Ours, 0x03 command failure.</summary>
+    Failure,
+
+    /// <summary>Ours, 0x04: the mouse did not answer the dongle (asleep, off or out of range).</summary>
+    NoResponse,
+
+    /// <summary>Ours, 0x05: the command is not supported.</summary>
+    NotSupported,
 }

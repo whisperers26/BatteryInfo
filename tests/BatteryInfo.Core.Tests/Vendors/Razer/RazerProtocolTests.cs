@@ -88,4 +88,103 @@ public class RazerProtocolTests
     {
         Assert.Throws<ArgumentException>(() => RazerProtocol.Build(0x07, 0x80, 0x02, new byte[81]));
     }
+
+    // A reply as the device would hand it back: the request header echoed with a new status and arguments.
+    internal static byte[] Reply(byte status, byte commandClass, byte commandId, byte size, byte[] args,
+        byte transactionId = 0x1F, bool badCrc = false)
+    {
+        var buffer = new byte[91];
+        buffer[1] = status;
+        buffer[2] = transactionId;
+        buffer[6] = size;
+        buffer[7] = commandClass;
+        buffer[8] = commandId;
+        args.CopyTo(buffer, 9);
+        buffer[89] = RazerProtocol.Crc(buffer);
+        if (badCrc) buffer[89] ^= 0xFF;
+        return buffer;
+    }
+
+    [Fact]
+    public void Battery_reply_with_status_02_and_valid_crc_is_a_success()
+    {
+        // 02 1F 00 00 00 02 07 80 | 00 F5 | ... | CRC 70 = 02^07^80^00^F5
+        var reply = new byte[91];
+        byte[] header = [0x00, 0x02, 0x1F, 0x00, 0x00, 0x00, 0x02, 0x07, 0x80, 0x00, 0xF5];
+        header.CopyTo(reply, 0);
+        reply[89] = 0x70;
+
+        Assert.Equal(RazerReplyKind.Success, RazerProtocol.Classify(RazerProtocol.BatteryLevelRequest(), reply));
+    }
+
+    [Theory]
+    [InlineData(0x00, RazerReplyKind.Pending)]
+    [InlineData(0x01, RazerReplyKind.Pending)]
+    [InlineData(0x02, RazerReplyKind.Success)]
+    [InlineData(0x03, RazerReplyKind.Failure)]
+    [InlineData(0x04, RazerReplyKind.NoResponse)]
+    [InlineData(0x05, RazerReplyKind.NotSupported)]
+    [InlineData(0x06, RazerReplyKind.Pending)]
+    public void Status_byte_decides_the_kind_of_a_matching_reply(byte status, RazerReplyKind expected)
+    {
+        var reply = Reply(status, 0x07, 0x80, 0x02, [0x00, 0xF5]);
+
+        Assert.Equal(expected, RazerProtocol.Classify(RazerProtocol.BatteryLevelRequest(), reply));
+    }
+
+    [Fact]
+    public void Success_with_a_bad_crc_is_flagged()
+    {
+        var reply = Reply(0x02, 0x07, 0x80, 0x02, [0x00, 0xF5], badCrc: true);
+
+        Assert.Equal(RazerReplyKind.BadCrc, RazerProtocol.Classify(RazerProtocol.BatteryLevelRequest(), reply));
+    }
+
+    [Fact]
+    public void The_untouched_request_echo_is_pending()
+    {
+        var request = RazerProtocol.BatteryLevelRequest();
+
+        Assert.Equal(RazerReplyKind.Pending, RazerProtocol.Classify(request, request.ToArray()));
+    }
+
+    public static TheoryData<string, byte[]> ForeignReplies => new()
+    {
+        // Synapse clients share the MI_00 mailbox and also use txid 0x1F (razer.md §5).
+        { "same txid, other class", Reply(0x02, 0x0F, 0x80, 0x02, [0x00, 0xF5]) },
+        { "same txid and class, other id", Reply(0x02, 0x07, 0x84, 0x02, [0x00, 0x01]) },
+        { "same txid, class and id, other size", Reply(0x02, 0x07, 0x80, 0x03, [0x00, 0xF5]) },
+        { "same header, other battery id", Reply(0x02, 0x07, 0x80, 0x02, [0x01, 0xF5]) },
+        { "other txid", Reply(0x02, 0x07, 0x80, 0x02, [0x00, 0xF5], transactionId: 0x05) },
+        { "other txid, status 04", Reply(0x04, 0x07, 0x80, 0x02, [0x00, 0x00], transactionId: 0x05) },
+        { "busy for another command", Reply(0x01, 0x0F, 0x02, 0x0C, []) },
+    };
+
+    [Theory]
+    [MemberData(nameof(ForeignReplies))]
+    public void Replies_to_other_commands_are_foreign(string _, byte[] reply)
+    {
+        Assert.Equal(RazerReplyKind.Foreign, RazerProtocol.Classify(RazerProtocol.BatteryLevelRequest(), reply));
+    }
+
+    [Fact]
+    public void A_buffer_with_another_report_id_or_length_is_foreign()
+    {
+        var request = RazerProtocol.BatteryLevelRequest();
+        var reply = Reply(0x02, 0x07, 0x80, 0x02, [0x00, 0xF5]);
+        var otherId = reply.ToArray();
+        otherId[0] = 0x05;
+
+        Assert.Equal(RazerReplyKind.Foreign, RazerProtocol.Classify(request, otherId));
+        Assert.Equal(RazerReplyKind.Foreign, RazerProtocol.Classify(request, reply.AsSpan(0, 90)));
+    }
+
+    [Fact]
+    public void Wireless_status_reply_matches_whatever_its_first_argument()
+    {
+        // For 00/BF args[0] is the slot count, not an echoed id.
+        var reply = Reply(0x02, 0x00, 0xBF, 0x50, [0x02, 0x01, 0x00, 0xD7, 0x00, 0xFF, 0xFF]);
+
+        Assert.Equal(RazerReplyKind.Success, RazerProtocol.Classify(RazerProtocol.WirelessStatusRequest(), reply));
+    }
 }
