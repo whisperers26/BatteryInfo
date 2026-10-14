@@ -73,6 +73,7 @@ Response = an input report on the SAME handle: [0] = reportId, then d[0..] (d[n]
 
 a) 12 03 00 00 getConnectionType: d[4] = 0 wired, 1 RF 2.4G, 2 BT, 0xFF not present/unusable.
    - Alive = valid reply && d[4] != 0xFF. A reject or timeout also means offline.
+   - Seen live 2026-10-14 14:25 with the Azoth X asleep: the A0 00 scan still lists the slot (`01 A0 00 01 00 25 1C 02 04`) and `12 03` answers `02 12 03 00 00 FF`, so the keyboard is reported asleep without sending `12 01`.
    - Its latency matches dongle-local commands, so through the OMNI it probably reflects the dongle's link state.
 
 b) 12 01 00 00 getPowerInfo, needs >= 10 data bytes:
