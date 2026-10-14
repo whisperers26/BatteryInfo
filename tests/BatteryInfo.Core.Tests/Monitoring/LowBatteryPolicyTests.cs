@@ -197,4 +197,73 @@ public class LowBatteryPolicyTests
 
         Assert.Single(_policy.Evaluate([State(29)]));
     }
+
+    // A restart: a new policy at the user's threshold, given what this one had alerted.
+    private LowBatteryPolicy Restart(int threshold = 20)
+    {
+        var restarted = new LowBatteryPolicy { Threshold = threshold };
+        restarted.Restore(_policy.Alerted);
+        return restarted;
+    }
+
+    [Fact]
+    public void Does_not_fire_again_after_a_restart_for_a_component_already_alerted()
+    {
+        Assert.Single(_policy.Evaluate([State(15)]));
+
+        var restarted = Restart();
+
+        Assert.Empty(restarted.Evaluate([State(15)]));
+        Assert.Empty(restarted.Evaluate([State(14)]));
+    }
+
+    [Fact]
+    public void Fires_after_a_restart_for_a_value_not_alerted_under_a_lower_threshold()
+    {
+        _policy.Threshold = 10;
+        Assert.Empty(_policy.Evaluate([State(15)]));
+        _policy.Threshold = 20; // raised while the device is off, so nothing is evaluated
+
+        Assert.Single(Restart(threshold: 20).Evaluate([State(15)]));
+    }
+
+    [Fact]
+    public void Fires_after_a_restart_when_the_component_was_rearmed_before_it()
+    {
+        _policy.Evaluate([State(15)]);
+        _policy.Evaluate([State(15, ChargeState.Charging)]);
+
+        Assert.Single(Restart().Evaluate([State(15)]));
+    }
+
+    [Fact]
+    public void Restored_component_rearms_when_charging_starts()
+    {
+        _policy.Evaluate([State(15)]);
+        var restarted = Restart();
+
+        Assert.Empty(restarted.Evaluate([State(15, ChargeState.Charging)]));
+        Assert.Single(restarted.Evaluate([State(15)]));
+    }
+
+    [Fact]
+    public void Restores_earbud_components_independently()
+    {
+        _policy.Evaluate([Earbuds(left: 15, right: 40)]);
+
+        var alert = Assert.Single(Restart().Evaluate([Earbuds(left: 14, right: 19)]));
+        Assert.Equal("Right", alert.Component);
+    }
+
+    [Fact]
+    public void Alerted_is_a_copy_that_later_evaluations_do_not_change()
+    {
+        _policy.Evaluate([State(15)]);
+        var alerted = _policy.Alerted;
+
+        _policy.Evaluate([State(15, ChargeState.Charging)]);
+
+        Assert.Single(alerted);
+        Assert.Empty(_policy.Alerted);
+    }
 }
