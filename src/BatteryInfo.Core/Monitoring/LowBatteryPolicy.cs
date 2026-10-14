@@ -8,7 +8,9 @@ public sealed record LowBatteryAlert(string DeviceId, string DeviceName, string 
 public sealed class LowBatteryPolicy
 {
     private const int RearmMargin = 5;
-    private readonly HashSet<string> _alerted = new(StringComparer.OrdinalIgnoreCase);
+
+    // Device id -> names of its components that have alerted in the current discharge.
+    private readonly Dictionary<string, HashSet<string>> _alerted = new(StringComparer.OrdinalIgnoreCase);
 
     public int Threshold { get; set; } = 20;
 
@@ -20,24 +22,34 @@ public sealed class LowBatteryPolicy
             var reading = state.Latest;
             if (reading.Status != DeviceStatus.Online) continue;
 
+            var alerted = AlertedComponents(reading.DeviceId);
             foreach (var component in reading.Components)
             {
                 if (component.Percent is not { } percent) continue;
-                var key = $"{reading.DeviceId}|{component.Name}";
 
                 if (IsOnPower(component.Charge) || percent > Threshold + RearmMargin)
                 {
-                    _alerted.Remove(key);
+                    alerted.Remove(component.Name);
                     continue;
                 }
 
-                if (percent <= Threshold && _alerted.Add(key))
+                if (percent <= Threshold && alerted.Add(component.Name))
                 {
                     alerts.Add(new LowBatteryAlert(reading.DeviceId, reading.Name, component.Name, percent));
                 }
             }
         }
         return alerts;
+    }
+
+    private HashSet<string> AlertedComponents(string deviceId)
+    {
+        if (!_alerted.TryGetValue(deviceId, out var components))
+        {
+            components = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            _alerted.Add(deviceId, components);
+        }
+        return components;
     }
 
     private static bool IsOnPower(ChargeState charge) =>
