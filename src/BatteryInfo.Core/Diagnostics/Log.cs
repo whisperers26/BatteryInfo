@@ -31,14 +31,12 @@ public static class Log
         try
         {
             Directory.CreateDirectory(directory);
-            foreach (var file in Directory.GetFiles(directory, "batteryinfo-*.log"))
-            {
-                if (_time.GetUtcNow().UtcDateTime - File.GetLastWriteTimeUtc(file) > Keep) File.Delete(file);
-            }
         }
         catch (Exception e) when (e is IOException or UnauthorizedAccessException)
         {
+            return;
         }
+        DeleteOldFiles(directory);
     }
 
     public static void Info(string message) => Write("INFO", message);
@@ -63,6 +61,20 @@ public static class Log
             sb.Append(b.ToString("X2", CultureInfo.InvariantCulture));
         }
         return sb.ToString();
+    }
+
+    private static void DeleteOldFiles(string directory)
+    {
+        try
+        {
+            foreach (var file in Directory.GetFiles(directory, "batteryinfo-*.log"))
+            {
+                if (_time.GetUtcNow().UtcDateTime - File.GetLastWriteTimeUtc(file) > Keep) File.Delete(file);
+            }
+        }
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException)
+        {
+        }
     }
 
     private static void Write(string level, string message)
