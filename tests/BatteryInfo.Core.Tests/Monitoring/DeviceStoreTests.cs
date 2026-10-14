@@ -60,6 +60,19 @@ public class DeviceStoreTests
     }
 
     [Fact]
+    public void Device_asleep_with_a_known_value_stays_offline_when_missing_from_its_vendor_poll()
+    {
+        _store.Apply("ROG", [Reading("rog:azoth-x:T4", "ROG", 45)]);
+        _store.Apply("ROG", [Reading("rog:azoth-x:T4", "ROG", null, DeviceStatus.Asleep)]);
+
+        _store.Apply("ROG", []);
+
+        var state = Assert.Single(_store.Snapshot());
+        Assert.Equal(DeviceStatus.Offline, state.Latest.Status);
+        Assert.Equal(45, state.DisplayComponents[0].Percent);
+    }
+
+    [Fact]
     public void Apply_leaves_other_vendors_untouched()
     {
         _store.Apply("Betop", [Reading("betop:KP70C2", "Betop", 91)]);
