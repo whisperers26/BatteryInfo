@@ -41,7 +41,7 @@ public class BetopProtocolTests
     [Fact]
     public void Observed_reply_is_91_percent_discharging()
     {
-        Assert.True(BetopProtocol.TryParseBattery(ObservedReply, chargeInLowNibble: true, out var status));
+        Assert.True(BetopProtocol.TryParseBattery(ObservedReply, out var status));
 
         Assert.Equal(new BetopStatus(91, ChargeState.Discharging), status);
     }
@@ -49,7 +49,7 @@ public class BetopProtocolTests
     [Fact]
     public void Low_nibble_1_is_charging()
     {
-        Assert.True(BetopProtocol.TryParseBattery(WithByte(ObservedReply, 4, 0x51), chargeInLowNibble: true, out var status));
+        Assert.True(BetopProtocol.TryParseBattery(WithByte(ObservedReply, 4, 0x51), out var status));
 
         Assert.Equal(ChargeState.Charging, status.Charge);
     }
@@ -59,7 +59,7 @@ public class BetopProtocolTests
     [InlineData(0x0F)]
     public void Unobserved_low_nibbles_are_unknown(byte value)
     {
-        Assert.True(BetopProtocol.TryParseBattery(WithByte(ObservedReply, 4, value), chargeInLowNibble: true, out var status));
+        Assert.True(BetopProtocol.TryParseBattery(WithByte(ObservedReply, 4, value), out var status));
 
         Assert.Equal(ChargeState.Unknown, status.Charge);
     }
@@ -67,10 +67,12 @@ public class BetopProtocolTests
     [Theory]
     [InlineData(0x00, ChargeState.Discharging)]
     [InlineData(0x01, ChargeState.Charging)]
-    [InlineData(0x51, ChargeState.Unknown)]
-    public void Whole_byte_models_compare_the_whole_charge_byte(byte value, ChargeState expected)
+    [InlineData(0x50, ChargeState.Discharging)]
+    [InlineData(0x51, ChargeState.Charging)]
+    [InlineData(0xF1, ChargeState.Charging)]
+    public void The_high_nibble_of_the_charge_byte_is_ignored(byte value, ChargeState expected)
     {
-        Assert.True(BetopProtocol.TryParseBattery(WithByte(ObservedReply, 4, value), chargeInLowNibble: false, out var status));
+        Assert.True(BetopProtocol.TryParseBattery(WithByte(ObservedReply, 4, value), out var status));
 
         Assert.Equal(expected, status.Charge);
     }
@@ -82,7 +84,7 @@ public class BetopProtocolTests
     [InlineData(255, 100)]
     public void Percent_above_100_is_clamped(byte raw, int expected)
     {
-        Assert.True(BetopProtocol.TryParseBattery(WithByte(ObservedReply, 2, raw), chargeInLowNibble: true, out var status));
+        Assert.True(BetopProtocol.TryParseBattery(WithByte(ObservedReply, 2, raw), out var status));
 
         Assert.Equal(expected, status.Percent);
     }
@@ -96,7 +98,7 @@ public class BetopProtocolTests
     [InlineData(new byte[] { 0x02, 0x15, 0x5B, 0x00 })]       // too short to hold the charge byte
     [InlineData(new byte[0])]
     public void Other_frames_are_not_battery_replies(byte[] report) =>
-        Assert.False(BetopProtocol.TryParseBattery(report, chargeInLowNibble: true, out _));
+        Assert.False(BetopProtocol.TryParseBattery(report, out _));
 
     private static HidDeviceInfo Collection(ushort usagePage = 0x00FF, ushort usage = 0x0003, int input = 64, int output = 64,
         bool accessible = true) =>

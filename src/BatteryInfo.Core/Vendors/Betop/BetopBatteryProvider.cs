@@ -171,14 +171,14 @@ public sealed class BetopBatteryProvider : IBatteryProvider
             cancellationToken.ThrowIfCancellationRequested();
             connection.FlushQueue();
             connection.Write(BetopProtocol.BuildBatteryRequest());
-            if (AwaitBatteryReply(connection, model) is { } status)
+            if (AwaitBatteryReply(connection) is { } status)
                 return Reading(model, DeviceStatus.Online, [BatteryComponent.Single(status.Percent, status.Charge)]);
         }
         return Reading(model, DeviceStatus.Asleep, [], NoAnswer);
     }
 
     // Skips every other frame on the handle: BetopGame's 0x25/0x11/0x21 replies, unsolicited 0x55 link changes.
-    private BetopStatus? AwaitBatteryReply(IHidConnection connection, BetopModel model)
+    private BetopStatus? AwaitBatteryReply(IHidConnection connection)
     {
         var started = _time.GetTimestamp();
         while (true)
@@ -186,7 +186,7 @@ public sealed class BetopBatteryProvider : IBatteryProvider
             var remaining = ReplyTimeout - _time.GetElapsedTime(started);
             if (remaining <= TimeSpan.Zero) return null;
             if (connection.Read(remaining) is not { } report) return null;
-            if (BetopProtocol.TryParseBattery(report, model.ChargeInLowNibble, out var status)) return status;
+            if (BetopProtocol.TryParseBattery(report, out var status)) return status;
         }
     }
 

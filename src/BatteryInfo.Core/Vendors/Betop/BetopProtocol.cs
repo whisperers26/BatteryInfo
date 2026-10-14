@@ -44,15 +44,15 @@ public static class BetopProtocol
         device is { Accessible: true, UsagePage: VendorUsagePage, Usage: VendorUsage, InputReportLength: ReportLength, OutputReportLength: ReportLength };
 
     /// <summary>Parses a 02 15 reply. Any other frame (BetopGame's 0x25/0x11/0x21 replies, an unsolicited 0x55, other
-    /// report ids) returns false so callers can skip it.</summary>
-    /// <param name="chargeInLowNibble">KP50/KP70/PG01: charge state is byte 4 &amp; 0x0F. KP20/KP40: the whole byte.</param>
-    public static bool TryParseBattery(ReadOnlySpan<byte> report, bool chargeInLowNibble, out BetopStatus status)
+    /// report ids) returns false so callers can skip it. The charge state is byte 4 &amp; 0x0F for every model in
+    /// <see cref="BetopModels"/>: only the byte-substituting scripts (kp20/kp30/kp40/kp401/kp40v1r) compare the whole
+    /// byte, and those models are not in the table.</summary>
+    public static bool TryParseBattery(ReadOnlySpan<byte> report, out BetopStatus status)
     {
         status = default;
         if (report.Length <= ChargeOffset || report[0] != ReportId || report[1] != GetBaseInfo) return false;
 
-        var charge = chargeInLowNibble ? report[ChargeOffset] & 0x0F : report[ChargeOffset];
-        status = new BetopStatus(Math.Min((int)report[PercentOffset], 100), charge switch
+        status = new BetopStatus(Math.Min((int)report[PercentOffset], 100), (report[ChargeOffset] & 0x0F) switch
         {
             0 => ChargeState.Discharging,
             1 => ChargeState.Charging,

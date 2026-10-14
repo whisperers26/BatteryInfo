@@ -4,9 +4,7 @@ namespace BatteryInfo.Core.Vendors.Betop;
 /// <param name="Name">Model name as BetopGame uses it, e.g. "KP70C2".</param>
 /// <param name="WiredProductId">PID of the pad on a USB cable (VID 0x20BC).</param>
 /// <param name="DongleProductId">PID of its dongle with the pad linked (VID 0x20BC).</param>
-/// <param name="ChargeInLowNibble">True when only the low nibble of reply byte 4 is the charge state; the KP20
-/// and KP40 families use the whole byte.</param>
-public sealed record BetopModel(string Name, ushort WiredProductId, ushort DongleProductId, bool ChargeInLowNibble = true)
+public sealed record BetopModel(string Name, ushort WiredProductId, ushort DongleProductId)
 {
     /// <summary>Shared by the wired and dongle paths of one pad.</summary>
     public string DeviceId => $"betop:{Name}";
@@ -28,12 +26,12 @@ public static class BetopModels
     // table, so a plain request would reach them as a different command. They are deliberately absent.
     public static IReadOnlyList<BetopModel> All { get; } =
     [
-        new("KP20D", 0x5158, 0x5159, ChargeInLowNibble: false),
-        new("KP20DL", 0x516F, 0x5170, ChargeInLowNibble: false),
-        new("KP20EB", 0x5190, 0x5191, ChargeInLowNibble: false),
-        new("KP40D", 0x515B, 0x515C, ChargeInLowNibble: false),
-        new("KP40MCF", 0x5165, 0x5166, ChargeInLowNibble: false),
-        new("KP40MCK", 0x5163, 0x5164, ChargeInLowNibble: false),
+        new("KP20D", 0x5158, 0x5159),
+        new("KP20DL", 0x516F, 0x5170),
+        new("KP20EB", 0x5190, 0x5191),
+        new("KP40D", 0x515B, 0x515C),
+        new("KP40MCF", 0x5165, 0x5166),
+        new("KP40MCK", 0x5163, 0x5164),
         new("KP50C", 0x5149, 0x514A),
         new("KP50D", 0x5150, 0x5151),
         new("KP50E", 0x5152, 0x5153),

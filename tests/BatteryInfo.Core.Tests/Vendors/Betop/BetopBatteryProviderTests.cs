@@ -84,6 +84,30 @@ public class BetopBatteryProviderTests
         Assert.Equal(ChargeState.Charging, Assert.Single(reading.Components).Charge);
     }
 
+    // kp20d.js, kp20dl.js, kp20eb.js, kp40d.js, kp40df.js and kp40dk.js all mask byte 4 with 0x0F, like kp70c2.js.
+    [Theory]
+    [InlineData(0x5159, "betop:KP20D", 0x51, ChargeState.Charging)]
+    [InlineData(0x5159, "betop:KP20D", 0x50, ChargeState.Discharging)]
+    [InlineData(0x5170, "betop:KP20DL", 0x51, ChargeState.Charging)]
+    [InlineData(0x5191, "betop:KP20EB", 0x51, ChargeState.Charging)]
+    [InlineData(0x515C, "betop:KP40D", 0x51, ChargeState.Charging)]
+    [InlineData(0x5166, "betop:KP40MCF", 0x51, ChargeState.Charging)]
+    [InlineData(0x5166, "betop:KP40MCF", 0x50, ChargeState.Discharging)]
+    [InlineData(0x5164, "betop:KP40MCK", 0x51, ChargeState.Charging)]
+    public void KP20_and_KP40_dongles_read_the_charge_state_from_the_low_nibble(int pid, string deviceId, byte chargeByte,
+        ChargeState expected)
+    {
+        var dongle = _fake.Add(0x20BC, (ushort)pid, 0x00FF, 0x0003, 64, 64, mi: 1, outputReportId: 0x02);
+        var reply = (byte[])Reply91.Clone();
+        reply[4] = chargeByte;
+        ReplyWith(dongle, reply);
+
+        var reading = Assert.Single(Poll(Provider()));
+
+        Assert.Equal(deviceId, reading.DeviceId);
+        Assert.Equal([BatteryComponent.Single(91, expected)], reading.Components);
+    }
+
     [Fact]
     public void Foreign_frames_from_BetopGame_are_skipped()
     {

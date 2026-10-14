@@ -79,13 +79,4 @@ public class BetopModelsTests
         Assert.Null(BetopModels.FindAsleepDongle(0x20BC, 0x518D));
         Assert.Null(BetopModels.FindAsleepDongle(0x0517, 0x518D));
     }
-
-    [Theory]
-    [InlineData("KP20D", false)]
-    [InlineData("KP40MCK", false)]
-    [InlineData("KP50C", true)]
-    [InlineData("KP70C2", true)]
-    [InlineData("PG01A", true)]
-    public void KP20_and_KP40_use_the_whole_charge_byte(string name, bool lowNibble) =>
-        Assert.Equal(lowNibble, BetopModels.All.Single(m => m.Name == name).ChargeInLowNibble);
 }
