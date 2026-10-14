@@ -1,5 +1,6 @@
 using BatteryInfo.Core.Hid;
 using BatteryInfo.Core.Model;
+using BatteryInfo.Core.Monitoring;
 using BatteryInfo.Core.Safety;
 using BatteryInfo.Core.Tests.Fakes;
 using BatteryInfo.Core.Vendors.Rog;
@@ -505,6 +506,46 @@ public class RogBatteryProviderTests
 
         Assert.Equal([AzothXId, "rog:azoth-x:R2"], readings.Select(r => r.DeviceId));
         Assert.Equal([DeviceStatus.Online, DeviceStatus.Error], readings.Select(r => r.Status));
+    }
+
+    [Fact]
+    public async Task Failed_scan_between_good_polls_keeps_the_keyboard_and_adds_no_receiver_row()
+    {
+        var omni = new FakeOmni(_backend);
+        var provider = Provider();
+        var store = new DeviceStore(_time);
+        store.Apply("ROG", await provider.PollAsync(CancellationToken.None));
+        omni.Receiver.Silent(RogProtocol.ScanForPairedDevices);
+        _time.Advance(TimeSpan.FromMinutes(2));
+
+        store.Apply("ROG", await provider.PollAsync(CancellationToken.None));
+
+        var failed = Assert.Single(store.Snapshot());
+        Assert.Equal(AzothXId, failed.Latest.DeviceId);
+        Assert.Equal(DeviceStatus.Error, failed.Latest.Status);
+        Assert.Equal(45, failed.DisplayComponents[0].Percent);
+
+        omni.Receiver.On(RogProtocol.ScanForPairedDevices, ScanAzothX);
+        _time.Advance(TimeSpan.FromMinutes(2));
+        store.Apply("ROG", await provider.PollAsync(CancellationToken.None));
+
+        Assert.Equal(DeviceStatus.Online, Assert.Single(store.Snapshot()).Latest.Status);
+    }
+
+    [Fact]
+    public async Task Receiver_row_from_a_failed_first_scan_is_gone_after_the_next_good_poll()
+    {
+        var omni = new FakeOmni(_backend);
+        omni.Receiver.Silent(RogProtocol.ScanForPairedDevices);
+        var provider = Provider();
+        var store = new DeviceStore(_time);
+        store.Apply("ROG", await provider.PollAsync(CancellationToken.None));
+        omni.Receiver.On(RogProtocol.ScanForPairedDevices, ScanAzothX);
+        _time.Advance(TimeSpan.FromMinutes(2));
+
+        store.Apply("ROG", await provider.PollAsync(CancellationToken.None));
+
+        Assert.Equal([AzothXId], store.Snapshot().Select(s => s.Latest.DeviceId));
     }
 
     [Fact]
