@@ -6,6 +6,7 @@ using System.Windows.Threading;
 using BatteryInfo.App.Demo;
 using BatteryInfo.App.Flyout;
 using BatteryInfo.App.Interop;
+using BatteryInfo.App.Services;
 using BatteryInfo.App.Tray;
 using BatteryInfo.App.ViewModels;
 using BatteryInfo.Core;
@@ -38,6 +39,7 @@ public partial class App : Application, IFlyoutServices
     private TrayIconHost? _tray;
     private FlyoutViewModel? _flyoutViewModel;
     private FlyoutWindow? _flyout;
+    private LowBatteryNotifier? _notifier;
 
     // Before WPF or WinForms create any window, so both lay out per monitor. This constructor must not mention
     // other WPF types: compiling it would load WPF, which fixes the DPI awareness first.
@@ -92,6 +94,11 @@ public partial class App : Application, IFlyoutServices
         _tray.LeftClicked += (_, _) => ToggleFlyout();
         _tray.RefreshClicked += (_, _) => _ = _monitor.RefreshAsync();
         _tray.ExitClicked += (_, _) => Shutdown();
+        _notifier = new LowBatteryNotifier(_tray.ShowWarning)
+        {
+            Threshold = _settings.LowBatteryThreshold,
+            Enabled = _settings.NotificationsEnabled,
+        };
         _instance.ListenForShowRequests(() => Dispatcher.BeginInvoke(ShowFlyout));
 
         SystemEvents.PowerModeChanged += OnPowerModeChanged;
@@ -155,6 +162,7 @@ public partial class App : Application, IFlyoutServices
     {
         _tray?.SetTooltip(TrayTooltip.Build(snapshot));
         _flyoutViewModel?.Update(snapshot, _monitor?.LastRefresh);
+        _notifier?.Process(snapshot);
     }
 
     private void ToggleFlyout()
@@ -206,9 +214,17 @@ public partial class App : Application, IFlyoutServices
     {
     }
 
-    void IFlyoutServices.SetLowBatteryThreshold(int percent) => UpdateSettings(_settings with { LowBatteryThreshold = percent });
+    void IFlyoutServices.SetLowBatteryThreshold(int percent)
+    {
+        if (_notifier is not null) _notifier.Threshold = percent;
+        UpdateSettings(_settings with { LowBatteryThreshold = percent });
+    }
 
-    void IFlyoutServices.SetNotificationsEnabled(bool enabled) => UpdateSettings(_settings with { NotificationsEnabled = enabled });
+    void IFlyoutServices.SetNotificationsEnabled(bool enabled)
+    {
+        if (_notifier is not null) _notifier.Enabled = enabled;
+        UpdateSettings(_settings with { NotificationsEnabled = enabled });
+    }
 
     private void OnPowerModeChanged(object sender, PowerModeChangedEventArgs e)
     {

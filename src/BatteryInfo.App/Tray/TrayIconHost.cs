@@ -44,6 +44,13 @@ internal sealed class TrayIconHost : IDisposable
     /// <summary>Sets the tooltip; Windows allows at most 127 characters.</summary>
     public void SetTooltip(string text) => _icon.Text = text.Length <= TrayTooltip.MaxLength ? text : text[..TrayTooltip.MaxLength];
 
+    /// <summary>Shows a warning notification (a toast on Windows 11). The text is cut to the 255 characters Windows allows.</summary>
+    public void ShowWarning(string title, string text)
+    {
+        const int maxText = 255;
+        _icon.ShowBalloonTip(5000, title, text.Length <= maxText ? text : text[..(maxText - 1)] + "…", ToolTipIcon.Warning);
+    }
+
     public void Dispose()
     {
         SystemEvents.UserPreferenceChanged -= OnUserPreferenceChanged;
