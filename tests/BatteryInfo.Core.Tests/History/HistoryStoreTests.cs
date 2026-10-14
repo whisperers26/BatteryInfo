@@ -86,6 +86,25 @@ public sealed class HistoryStoreTests : IDisposable
     }
 
     [Fact]
+    public void AppendAll_writes_what_one_Append_per_snapshot_would()
+    {
+        var store = NewStore();
+        var t0 = _time.GetUtcNow();
+
+        store.AppendAll(
+        [
+            [Mouse(56, at: t0)],
+            [Mouse(56, at: t0.AddMinutes(10)), Earbuds(76, 75, 100, at: t0.AddMinutes(10))],
+            [Mouse(56, at: t0.AddMinutes(30))],
+            [Mouse(55, at: t0.AddMinutes(32))],
+        ]);
+
+        Assert.Equal([56, 56, 55], AllMouse(store).Select(r => r.Percent!.Value));
+        Assert.Equal(3, store.Query("huawei:C0DA5EA83EC7", DateTimeOffset.MinValue).Count);
+        Assert.Equal(6, File.ReadAllLines(Path.Combine(_directory, "2026-10.jsonl")).Length);
+    }
+
+    [Fact]
     public void A_changed_percent_or_charge_state_is_written_at_once()
     {
         var store = NewStore();

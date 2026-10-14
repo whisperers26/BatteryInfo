@@ -31,28 +31,16 @@ public sealed class HistoryStore(string directory, TimeProvider time)
 
     /// <summary>Records the fresh battery values in <paramref name="snapshot"/>. Stale, asleep and offline
     /// states carry no new value and are skipped.</summary>
-    public void Append(IReadOnlyList<DeviceState> snapshot)
+    public void Append(IReadOnlyList<DeviceState> snapshot) => AppendAll([snapshot]);
+
+    /// <summary>Appends several snapshots, oldest first, with one write per month file (for imports and the demo).</summary>
+    public void AppendAll(IEnumerable<IReadOnlyList<DeviceState>> snapshots)
     {
         lock (_gate)
         {
             var lastWritten = _lastWritten ??= LoadLastWritten();
             var toWrite = new List<HistoryRecord>();
-            foreach (var state in snapshot)
-            {
-                var reading = state.Latest;
-                if (reading.Status == DeviceStatus.Offline || !reading.HasBattery) continue;
-
-                foreach (var component in reading.Components)
-                {
-                    if (component.Percent is null) continue;
-                    var record = new HistoryRecord(reading.Timestamp, reading.DeviceId, reading.Name, reading.Vendor,
-                        reading.Kind, component.Name, component.Percent, component.Charge, reading.Status);
-                    var key = Key(record);
-                    if (lastWritten.TryGetValue(key, out var previous) && !ShouldWrite(previous, record)) continue;
-                    lastWritten[key] = record;
-                    toWrite.Add(record);
-                }
-            }
+            foreach (var snapshot in snapshots) Collect(snapshot, lastWritten, toWrite);
             Write(toWrite);
         }
     }
@@ -100,6 +88,27 @@ public sealed class HistoryStore(string directory, TimeProvider time)
                 {
                     Log.Warn($"Could not delete old history file {path}: {e.Message}");
                 }
+            }
+        }
+    }
+
+    private static void Collect(IReadOnlyList<DeviceState> snapshot, Dictionary<string, HistoryRecord> lastWritten,
+        List<HistoryRecord> toWrite)
+    {
+        foreach (var state in snapshot)
+        {
+            var reading = state.Latest;
+            if (reading.Status == DeviceStatus.Offline || !reading.HasBattery) continue;
+
+            foreach (var component in reading.Components)
+            {
+                if (component.Percent is null) continue;
+                var record = new HistoryRecord(reading.Timestamp, reading.DeviceId, reading.Name, reading.Vendor,
+                    reading.Kind, component.Name, component.Percent, component.Charge, reading.Status);
+                var key = Key(record);
+                if (lastWritten.TryGetValue(key, out var previous) && !ShouldWrite(previous, record)) continue;
+                lastWritten[key] = record;
+                toWrite.Add(record);
             }
         }
     }
