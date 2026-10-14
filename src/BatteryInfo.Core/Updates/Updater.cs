@@ -102,6 +102,7 @@ public sealed class Updater : IDisposable
             var ready = Status.State == UpdateState.ReadyToRestart ? Status : null;
             SetStatus(new UpdateStatus(UpdateState.Checking, _backend.CurrentVersion));
             var version = await _backend.CheckAsync(cancellationToken).ConfigureAwait(false);
+            Log.Info($"{(automatic ? "Automatic" : "Manual")} update check: {(version is null ? $"{_backend.CurrentVersion} is up to date" : $"{version} is available")}");
             if (version is null)
             {
                 SetStatus(new UpdateStatus(UpdateState.UpToDate, _backend.CurrentVersion));
