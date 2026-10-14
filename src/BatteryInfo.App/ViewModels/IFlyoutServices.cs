@@ -20,4 +20,9 @@ public interface IFlyoutServices
     void SetLowBatteryThreshold(int percent);
 
     void SetNotificationsEnabled(bool enabled);
+
+    void SetAutoUpdate(bool enabled);
+
+    /// <summary>Checks for an update now, or restarts to install one already downloaded.</summary>
+    void RunUpdateAction();
 }

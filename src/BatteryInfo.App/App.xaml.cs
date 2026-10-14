@@ -15,6 +15,7 @@ using BatteryInfo.Core.History;
 using BatteryInfo.Core.Monitoring;
 using BatteryInfo.Core.Presentation;
 using BatteryInfo.Core.Settings;
+using BatteryInfo.Core.Updates;
 using Microsoft.Win32;
 
 namespace BatteryInfo.App;
@@ -40,6 +41,7 @@ public partial class App : Application, IFlyoutServices
     private FlyoutViewModel? _flyoutViewModel;
     private FlyoutWindow? _flyout;
     private LowBatteryNotifier? _notifier;
+    private Updater? _updater;
     private StartWithWindowsSwitch? _startWithWindows;
 
     // Before WPF or WinForms create any window, so both lay out per monitor. This constructor must not mention
@@ -127,6 +129,7 @@ public partial class App : Application, IFlyoutServices
             Threshold = _settings.LowBatteryThreshold,
             Enabled = _settings.NotificationsEnabled,
         };
+        StartUpdater();
         _instance?.ListenForShowRequests(() => Dispatcher.BeginInvoke(ShowFlyout));
         // publish.ps1 asks before it replaces this copy: shutting down here lets OnExit remove the tray icon.
         _instance?.ListenForExitRequests(() =>
@@ -141,8 +144,38 @@ public partial class App : Application, IFlyoutServices
         if (_options.ShowFlyout) Dispatcher.BeginInvoke(DispatcherPriority.ApplicationIdle, ShowFlyout);
     }
 
+    // Updates come from this repository's GitHub releases. A local build (not installed through Setup.exe) reports
+    // updates as unavailable.
+    private void StartUpdater()
+    {
+        var updater = new Updater(new VelopackUpdateBackend(), _time) { Automatic = _settings.AutoUpdate };
+        _updater = updater;
+        updater.StatusChanged += (_, status) => Dispatcher.BeginInvoke(() => ApplyUpdateStatus(status));
+        updater.UpdateReady += (_, version) =>
+            Dispatcher.BeginInvoke(() => _tray?.ShowInfo(UpdateText.ReadyTitle, UpdateText.ReadyMessage(version)));
+        // The installer waits for this process to exit: shut down cleanly so the tray icon goes away.
+        updater.ExitRequested += (_, _) => Dispatcher.BeginInvoke(() => Shutdown());
+        if (_tray is not null) _tray.UpdateClicked += (_, _) => RunUpdateAction();
+        updater.Start();
+        ApplyUpdateStatus(updater.Status);
+    }
+
+    private void ApplyUpdateStatus(UpdateStatus status)
+    {
+        _flyoutViewModel?.SetUpdateStatus(status);
+        _tray?.SetUpdateItem(UpdateText.MenuLabel(status), UpdateText.Describe(status).ActionEnabled);
+    }
+
+    private void RunUpdateAction()
+    {
+        if (_updater is not { } updater) return;
+        if (updater.Status.State == UpdateState.ReadyToRestart) updater.RestartToUpdate();
+        else _ = updater.CheckNowAsync();
+    }
+
     protected override void OnExit(ExitEventArgs e)
     {
+        _updater?.Dispose();
         // Stop the inputs first, so no late snapshot reaches a disposed tray icon.
         SystemEvents.PowerModeChanged -= OnPowerModeChanged;
         if (_monitor is not null) _monitor.SnapshotChanged -= OnSnapshotChanged;
@@ -256,6 +289,14 @@ public partial class App : Application, IFlyoutServices
         if (_notifier is not null) _notifier.Threshold = percent;
         UpdateSettings(_settings with { LowBatteryThreshold = percent });
     }
+
+    void IFlyoutServices.SetAutoUpdate(bool enabled)
+    {
+        if (_updater is not null) _updater.Automatic = enabled;
+        UpdateSettings(_settings with { AutoUpdate = enabled });
+    }
+
+    void IFlyoutServices.RunUpdateAction() => RunUpdateAction();
 
     void IFlyoutServices.SetNotificationsEnabled(bool enabled)
     {

@@ -4,6 +4,7 @@ using BatteryInfo.Core.Diagnostics;
 using BatteryInfo.Core.Monitoring;
 using BatteryInfo.Core.Presentation;
 using BatteryInfo.Core.Settings;
+using BatteryInfo.Core.Updates;
 
 namespace BatteryInfo.App.ViewModels;
 
@@ -25,6 +26,9 @@ public sealed class FlyoutViewModel : ObservableObject
     private bool _notificationsEnabled;
     private bool _startWithWindows;
     private bool _isOpen;
+    private bool _autoUpdate;
+    private UpdateDescription _update = UpdateText.Describe(new UpdateStatus(UpdateState.Idle, null));
+    private readonly RelayCommand _updateCommand;
 
     public FlyoutViewModel(IFlyoutServices services, AppSettings settings)
     {
@@ -32,7 +36,9 @@ public sealed class FlyoutViewModel : ObservableObject
         _threshold = settings.LowBatteryThreshold;
         _notificationsEnabled = settings.NotificationsEnabled;
         _startWithWindows = services.IsStartWithWindowsEnabled();
+        _autoUpdate = settings.AutoUpdate;
         _refreshCommand = new RelayCommand(() => _ = RefreshAsync(), () => !IsRefreshing);
+        _updateCommand = new RelayCommand(services.RunUpdateAction, () => _update.ActionEnabled);
     }
 
     public ObservableCollection<DeviceViewModel> Devices { get; } = [];
@@ -80,6 +86,29 @@ public sealed class FlyoutViewModel : ObservableObject
         {
             if (SetProperty(ref _notificationsEnabled, value)) _services.SetNotificationsEnabled(value);
         }
+    }
+
+    public bool AutoUpdate
+    {
+        get => _autoUpdate;
+        set
+        {
+            if (SetProperty(ref _autoUpdate, value)) _services.SetAutoUpdate(value);
+        }
+    }
+
+    public string UpdateStatusText => _update.StatusLine;
+
+    public string UpdateActionText => _update.ActionLabel;
+
+    public RelayCommand UpdateCommand => _updateCommand;
+
+    public void SetUpdateStatus(UpdateStatus status)
+    {
+        _update = UpdateText.Describe(status);
+        OnPropertyChanged(nameof(UpdateStatusText));
+        OnPropertyChanged(nameof(UpdateActionText));
+        _updateCommand.RaiseCanExecuteChanged();
     }
 
     /// <summary>Mirrors the Run registry value, which stays the source of truth.</summary>
