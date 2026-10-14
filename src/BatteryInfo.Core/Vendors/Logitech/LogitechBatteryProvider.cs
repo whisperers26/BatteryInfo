@@ -530,7 +530,8 @@ public sealed class LogitechBatteryProvider : IBatteryProvider
             HidppFeature.UnifiedBattery => HidppProtocol.DecodeUnifiedBattery(Call(poll, Request(known, index, 1)), known.Capabilities),
             HidppFeature.BatteryStatus => HidppProtocol.DecodeBatteryStatus(Call(poll, Request(known, index, 0))),
             HidppFeature.BatteryVoltage => HidppProtocol.DecodeBatteryVoltage(Call(poll, Request(known, index, 0))),
-            _ => HidppProtocol.DecodeAdcMeasurement(Call(poll, Request(known, index, 0))),
+            // An error reply means inactive or off, like a clear flags bit0 (§7D).
+            _ => Optional(() => Call(poll, Request(known, index, 0))) is { } adc ? HidppProtocol.DecodeAdcMeasurement(adc) : null,
         };
         var source = $"HID++ 0x{feature:X4}";
         return battery is { } value

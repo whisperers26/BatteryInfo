@@ -357,6 +357,24 @@ public class LogitechBatteryProviderTests
     }
 
     [Fact]
+    public async Task Adc_measurement_error_reply_means_inactive_too()
+    {
+        // §7D (Solaar): flags bit0 clear, or an error reply, means the headset is inactive or off.
+        var device = _receiver.Pair(1);
+        device.Features.Remove(0x1004);
+        device.Features[0x1F20] = 0x07;
+        await PollSingle();
+        device.NextErrors.Enqueue(0x05);
+
+        var reading = await PollSingle();
+
+        Assert.Equal(DeviceStatus.Asleep, reading.Status);
+        Assert.Equal("HID++ 0x1F20", reading.Source);
+        Assert.Equal("Inactive (asleep or off)", reading.Detail);
+        Assert.Equal("logitech:B4655832", reading.DeviceId);
+    }
+
+    [Fact]
     public async Task Device_without_a_battery_feature_is_online_with_no_value()
     {
         _receiver.Pair(1).Features.Remove(0x1004);
