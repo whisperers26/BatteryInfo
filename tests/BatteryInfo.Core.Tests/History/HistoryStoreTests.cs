@@ -393,4 +393,37 @@ public sealed class HistoryStoreTests : IDisposable
         Assert.Equal(["2026-07.jsonl", "2026-10.jsonl", "notes.txt"],
             Directory.GetFiles(_directory).Select(Path.GetFileName).Order(StringComparer.Ordinal));
     }
+
+    [Fact]
+    public void PruneDaily_deletes_a_month_that_ages_out_while_the_app_runs()
+    {
+        Directory.CreateDirectory(_directory);
+        var july = Path.Combine(_directory, "2026-07.jsonl");
+        File.WriteAllText(july, "");
+        var store = NewStore();
+        store.Prune(TimeSpan.FromDays(90));
+
+        // 2026-11-01: 90 days back is 2026-08-03, so July has now ended before the cutoff.
+        _time.Advance(TimeSpan.FromDays(18));
+        store.PruneDaily(TimeSpan.FromDays(90));
+
+        Assert.False(File.Exists(july));
+    }
+
+    [Fact]
+    public void PruneDaily_prunes_at_most_once_per_utc_day()
+    {
+        var store = NewStore();
+        store.Prune(TimeSpan.FromDays(90));
+        Directory.CreateDirectory(_directory);
+        var may = Path.Combine(_directory, "2026-05.jsonl");
+        File.WriteAllText(may, "");
+
+        store.PruneDaily(TimeSpan.FromDays(90));
+        Assert.True(File.Exists(may));
+
+        _time.Advance(TimeSpan.FromHours(12)); // 2026-10-15 00:00 UTC
+        store.PruneDaily(TimeSpan.FromDays(90));
+        Assert.False(File.Exists(may));
+    }
 }

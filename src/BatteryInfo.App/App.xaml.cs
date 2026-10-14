@@ -174,10 +174,12 @@ public partial class App : Application, IFlyoutServices
         };
     }
 
-    // Raised on a pool thread after every poll: write history there, update the UI on the dispatcher.
+    // Raised on a pool thread after every poll: write history there, update the UI on the dispatcher. The app can run
+    // for weeks, so old history months are also deleted here, once a UTC day.
     private void OnSnapshotChanged(object? sender, IReadOnlyList<DeviceState> snapshot)
     {
         _history?.Append(snapshot);
+        _history?.PruneDaily(HistoryKeep);
         Dispatcher.BeginInvoke(DispatcherPriority.Normal, () => ApplySnapshot(snapshot));
     }
 

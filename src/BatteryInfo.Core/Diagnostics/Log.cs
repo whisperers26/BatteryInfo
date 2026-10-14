@@ -9,33 +9,36 @@ public static class Log
     private static readonly object Gate = new();
     private static readonly TimeSpan Keep = TimeSpan.FromDays(7);
     private static string? _directory;
+    private static TimeProvider _time = TimeProvider.System;
+    private static DateOnly? _cleanedOn;
 
     public static bool TraceFrames { get; private set; }
 
     /// <summary>Raised for every line written (the CLI's --trace and tests listen here).</summary>
     public static event Action<string>? LineWritten;
 
-    /// <summary>Sets where lines go. A null directory keeps lines in memory only (LineWritten).</summary>
-    public static void Configure(string? directory, bool traceFrames)
+    /// <summary>Sets where lines go. A null directory keeps lines in memory only (LineWritten). The clock is the
+    /// system's unless <paramref name="time"/> is given (tests).</summary>
+    public static void Configure(string? directory, bool traceFrames, TimeProvider? time = null)
     {
         lock (Gate)
         {
             _directory = directory;
             TraceFrames = traceFrames;
+            _time = time ?? TimeProvider.System;
+            _cleanedOn = DateOnly.FromDateTime(_time.GetLocalNow().DateTime);
         }
         if (directory is null) return;
 
         try
         {
             Directory.CreateDirectory(directory);
-            foreach (var file in Directory.GetFiles(directory, "batteryinfo-*.log"))
-            {
-                if (DateTime.UtcNow - File.GetLastWriteTimeUtc(file) > Keep) File.Delete(file);
-            }
         }
         catch (Exception e) when (e is IOException or UnauthorizedAccessException)
         {
+            return;
         }
+        DeleteOldFiles(directory);
     }
 
     public static void Info(string message) => Write("INFO", message);
@@ -62,14 +65,35 @@ public static class Log
         return sb.ToString();
     }
 
+    private static void DeleteOldFiles(string directory)
+    {
+        try
+        {
+            foreach (var file in Directory.GetFiles(directory, "batteryinfo-*.log"))
+            {
+                if (_time.GetUtcNow().UtcDateTime - File.GetLastWriteTimeUtc(file) > Keep) File.Delete(file);
+            }
+        }
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException)
+        {
+        }
+    }
+
     private static void Write(string level, string message)
     {
-        var now = DateTimeOffset.Now;
+        var now = _time.GetLocalNow();
         var line = $"{now.ToString("yyyy-MM-dd'T'HH:mm:ss.fffzzz", CultureInfo.InvariantCulture)} {level} {message}";
         lock (Gate)
         {
             if (_directory is not null)
             {
+                // The app can run for weeks (sleep, not shut down), so the cleanup also runs on each new day's file.
+                var today = DateOnly.FromDateTime(now.DateTime);
+                if (today != _cleanedOn)
+                {
+                    _cleanedOn = today;
+                    DeleteOldFiles(_directory);
+                }
                 try
                 {
                     var path = Path.Combine(_directory, $"batteryinfo-{now:yyyyMMdd}.log");

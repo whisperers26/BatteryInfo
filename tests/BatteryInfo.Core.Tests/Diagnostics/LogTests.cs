@@ -1,4 +1,5 @@
 using BatteryInfo.Core.Diagnostics;
+using BatteryInfo.Core.Tests.Fakes;
 
 namespace BatteryInfo.Core.Tests.Diagnostics;
 
@@ -65,6 +66,23 @@ public sealed class LogTests : IDisposable
         Log.Configure(_dir, traceFrames: false);
 
         Assert.False(File.Exists(old));
+    }
+
+    [Fact]
+    public void A_new_day_deletes_logs_older_than_seven_days_while_running()
+    {
+        // The real clock stamps the files; the manual one is what the log thinks "now" is.
+        var time = new ManualTimeProvider(DateTimeOffset.UtcNow);
+        Log.Configure(_dir, traceFrames: false, time);
+        Log.Info("first day");
+        var firstDay = Assert.Single(Directory.GetFiles(_dir, "batteryinfo-*.log"));
+
+        time.Advance(TimeSpan.FromDays(8));
+        Log.Info("ninth day");
+
+        var file = Assert.Single(Directory.GetFiles(_dir, "batteryinfo-*.log"));
+        Assert.NotEqual(firstDay, file);
+        Assert.Contains("INFO ninth day", File.ReadAllText(file));
     }
 
     [Fact]
