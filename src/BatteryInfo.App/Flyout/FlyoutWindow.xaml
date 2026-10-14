@@ -338,6 +338,25 @@
                     <CheckBox Grid.Column="1" Style="{StaticResource ToggleSwitchStyle}" VerticalAlignment="Center"
                               IsChecked="{Binding StartWithWindows}" AutomationProperties.Name="Start with Windows" />
                 </Grid>
+                <Grid MinHeight="36" Margin="0,0,6,0">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="Auto" />
+                    </Grid.ColumnDefinitions>
+                    <TextBlock Text="Update automatically" Style="{StaticResource SettingLabelStyle}" />
+                    <CheckBox Grid.Column="1" Style="{StaticResource ToggleSwitchStyle}" VerticalAlignment="Center"
+                              IsChecked="{Binding AutoUpdate}" AutomationProperties.Name="Update automatically" />
+                </Grid>
+                <Grid MinHeight="36" Margin="0,2,6,0">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="Auto" />
+                    </Grid.ColumnDefinitions>
+                    <TextBlock Text="{Binding UpdateStatusText}" FontSize="12" VerticalAlignment="Center" TextWrapping="Wrap"
+                               Margin="0,0,8,0" Foreground="{DynamicResource TextFillColorSecondaryBrush}" />
+                    <Button Grid.Column="1" Content="{Binding UpdateActionText}" Command="{Binding UpdateCommand}"
+                            Padding="10,4" VerticalAlignment="Center" AutomationProperties.Name="{Binding UpdateActionText}" />
+                </Grid>
             </StackPanel>
         </Border>
     </Grid>
