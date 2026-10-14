@@ -395,7 +395,9 @@ internal enum RogOutcome
 internal readonly record struct RogExchange(RogOutcome Outcome, byte[]? Report);
 
 /// <summary>Request/reply on one opened ROG collection (rog.md §3): flush, write the full output report, then read until
-/// the matching reply, an FF AA reject or the timeout, skipping other programs' frames; one retry when nothing answers.
+/// the matching reply or the timeout, skipping other programs' frames; one retry when nothing answers. An FF AA reject
+/// echoes no header, so it may answer another program's request on the same collection (rog.md §9): it is remembered and
+/// reading goes on, and only when no matching reply follows before the timeout is the exchange rejected (not retried).
 /// A copy of the last accepted reply header arriving within 100 ms of it is a duplicate and is ignored.</summary>
 internal sealed class RogChannel(IHidConnection connection, byte reportId, TimeProvider time)
 {
@@ -414,6 +416,7 @@ internal sealed class RogChannel(IHidConnection connection, byte reportId, TimeP
             connection.FlushQueue();
             connection.Write(request);
             var deadline = time.GetUtcNow() + timeout;
+            byte[]? reject = null;
             for (var reads = 0; reads < MaxReadsPerAttempt; reads++)
             {
                 var remaining = deadline - time.GetUtcNow();
@@ -422,13 +425,15 @@ internal sealed class RogChannel(IHidConnection connection, byte reportId, TimeP
                 switch (RogProtocol.Classify(report, reportId, command))
                 {
                     case RogFrame.Rejected:
-                        return new RogExchange(RogOutcome.Rejected, report);
+                        reject ??= report;
+                        break;
                     case RogFrame.Reply when !IsDuplicate(report, command):
                         _lastHeader = report[..HeaderLength(command)];
                         _lastReplyAt = time.GetUtcNow();
                         return new RogExchange(RogOutcome.Reply, report);
                 }
             }
+            if (reject is not null) return new RogExchange(RogOutcome.Rejected, reject);
         }
         return new RogExchange(RogOutcome.NoReply, null);
     }

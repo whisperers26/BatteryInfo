@@ -219,6 +219,20 @@ public class RogBatteryProviderTests
     }
 
     [Fact]
+    public async Task Foreign_reject_before_our_reply_is_skipped()
+    {
+        var omni = new FakeOmni(_backend);
+        // Gear Link's 12 00 0E is rejected on the same handle (rog.md 5e, 9) just before our 12 01 reply arrives.
+        omni.KeyboardSlot.On(RogProtocol.KeyboardPowerInfo, R(0x02, 0xFF, 0xAA), KeyboardPower45);
+
+        var reading = await PollSingle();
+
+        Assert.Equal(DeviceStatus.Online, reading.Status);
+        Assert.Equal([BatteryComponent.Single(45, ChargeState.Discharging)], reading.Components);
+        Assert.Equal([RogProtocol.KeyboardConnectionType, RogProtocol.KeyboardPowerInfo], omni.KeyboardSlot.Commands);
+    }
+
+    [Fact]
     public async Task Stale_reports_queued_before_the_request_are_flushed()
     {
         var omni = new FakeOmni(_backend);

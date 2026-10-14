@@ -47,6 +47,35 @@ public class RogChannelTests
     }
 
     [Fact]
+    public void Reject_followed_by_our_reply_is_the_reply()
+    {
+        // Another program's request was rejected (rog.md 5e); a reject echoes no header, so it may not be ours.
+        _slot.On(RogProtocol.KeyboardPowerInfo, R(0x02, 0xFF, 0xAA), KeyboardPower45);
+        var channel = Channel(out var connection);
+        using var _ = connection;
+
+        var exchange = channel.Transact(RogProtocol.KeyboardPowerInfo, Timeout);
+
+        Assert.Equal(RogOutcome.Reply, exchange.Outcome);
+        Assert.Equal(KeyboardPower45, exchange.Report);
+        Assert.Single(_slot.Device.Written);
+    }
+
+    [Fact]
+    public void Reject_then_foreign_traffic_until_the_deadline_is_rejected_without_a_retry()
+    {
+        using var connection = new ChattyConnection(_slot.Device.Info, _time, first: R(0x02, 0xFF, 0xAA));
+        var channel = new RogChannel(connection, 0x02, _time);
+
+        var exchange = channel.Transact(RogProtocol.KeyboardPowerInfo, Timeout);
+
+        Assert.Equal(RogOutcome.Rejected, exchange.Outcome);
+        Assert.Equal(R(0x02, 0xFF, 0xAA), exchange.Report);
+        Assert.Equal(1, connection.Writes);
+        Assert.InRange(connection.Reads, 6, 7);
+    }
+
+    [Fact]
     public void No_reply_is_retried_once()
     {
         var channel = Channel(out var connection);
@@ -112,8 +141,8 @@ public class RogChannelTests
         Assert.InRange(connection.Reads, 2, 14);
     }
 
-    // Every read takes 100 ms and returns another program's reply, forever.
-    private sealed class ChattyConnection(HidDeviceInfo device, ManualTimeProvider time) : IHidConnection
+    // Every read takes 100 ms and returns another program's reply, forever (the first read returns "first" when given).
+    private sealed class ChattyConnection(HidDeviceInfo device, ManualTimeProvider time, byte[]? first = null) : IHidConnection
     {
         public int Writes { get; private set; }
 
@@ -127,7 +156,7 @@ public class RogChannelTests
         {
             Reads++;
             time.Advance(TimeSpan.FromMilliseconds(100));
-            return R(0x02, 0x12, 0x07, 0x00, 0x00, 0x01);
+            return Reads == 1 && first is not null ? first : R(0x02, 0x12, 0x07, 0x00, 0x00, 0x01);
         }
 
         public void SetFeature(ReadOnlySpan<byte> report) => throw new NotSupportedException();
