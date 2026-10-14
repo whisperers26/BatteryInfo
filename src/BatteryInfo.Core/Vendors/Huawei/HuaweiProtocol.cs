@@ -1,4 +1,6 @@
+using System.Buffers.Binary;
 using System.Diagnostics.CodeAnalysis;
+using BatteryInfo.Core.Model;
 
 namespace BatteryInfo.Core.Vendors.Huawei;
 
@@ -10,6 +12,11 @@ public static class HuaweiProtocol
     public const byte Magic = 0x5A;
     public const byte DeviceConfigService = 0x01;
     public const byte BatteryLevelCommand = 0x08;
+    public const byte BatteryChangedCommand = 0x27;
+
+    /// <summary>Result TLV carried by some replies: a 4-byte big-endian code, 100000 (0x000186A0) = success.</summary>
+    private const byte ResultTlv = 0x7F;
+    private const uint ResultSuccess = 100000;
 
     /// <summary>Magic plus the two LEN bytes.</summary>
     private const int HeaderLength = 3;
@@ -60,6 +67,97 @@ public static class HuaweiProtocol
     public static byte[] BuildBatteryRequest() =>
         BuildFrame(DeviceConfigService, BatteryLevelCommand, [0x01, 0x00, 0x02, 0x00, 0x03, 0x00]);
 
+    /// <summary>The battery reply (0x01/0x08) or the battery-changed notification (0x01/0x27), which carries the same TLVs.</summary>
+    public static bool IsBatteryFrame(HuaweiFrame frame) =>
+        frame.Service == DeviceConfigService && frame.Command is BatteryLevelCommand or BatteryChangedCommand;
+
+    /// <summary>Splits a TLV list: type (1 byte), length (Huawei VarInt: 7 bits per byte, most significant group
+    /// first, high bit = more), value. Null when a length runs past the end.</summary>
+    public static IReadOnlyList<HuaweiTlv>? ParseTlvs(ReadOnlySpan<byte> payload)
+    {
+        var tlvs = new List<HuaweiTlv>();
+        var index = 0;
+        while (index < payload.Length)
+        {
+            var type = payload[index++];
+            if (!TryReadVarInt(payload, ref index, out var length) || length > payload.Length - index) return null;
+            tlvs.Add(new HuaweiTlv(type, payload.Slice(index, length).ToArray()));
+            index += length;
+        }
+        return tlvs;
+    }
+
+    /// <summary>Battery components from a battery reply's TLVs, or null when it carries no usable value (§7).</summary>
+    /// <remarks>T2 = [left, right, case] % is shown when it has exactly 3 bytes and at least one of them is valid;
+    /// otherwise T1 (device aggregate) becomes one component. T3 = charging flags [left, right, case], 1 = charging.
+    /// Values above 100 are unknown. A result TLV 0x7F other than 100000 means the request failed.</remarks>
+    public static IReadOnlyList<BatteryComponent>? ParseBattery(ReadOnlySpan<byte> payload)
+    {
+        var tlvs = ParseTlvs(payload);
+        if (tlvs is null) return null;
+
+        byte[]? aggregate = null, levels = null, charging = null, result = null;
+        foreach (var tlv in tlvs)
+        {
+            switch (tlv.Type)
+            {
+                case 0x01: aggregate ??= tlv.Value; break;
+                case 0x02: levels ??= tlv.Value; break;
+                case 0x03: charging ??= tlv.Value; break;
+                case ResultTlv: result ??= tlv.Value; break;
+            }
+        }
+
+        if (result is not null && (result.Length != 4 || BinaryPrimitives.ReadUInt32BigEndian(result) != ResultSuccess)) return null;
+
+        if (levels is { Length: 3 } && levels.Any(v => v <= 100))
+        {
+            return
+            [
+                new BatteryComponent("Left", Percent(levels[0]), ChargeOf(charging, 0)),
+                new BatteryComponent("Right", Percent(levels[1]), ChargeOf(charging, 1)),
+                new BatteryComponent("Case", Percent(levels[2]), ChargeOf(charging, 2)),
+            ];
+        }
+
+        if (aggregate is [var level] && level <= 100) return [BatteryComponent.Single(level, AnyCharging(charging))];
+        return null;
+    }
+
+    private static int? Percent(byte value) => value <= 100 ? value : null;
+
+    private static ChargeState ChargeOf(byte[]? flags, int index) =>
+        flags is { Length: 3 } ? Charge(flags[index]) : ChargeState.Unknown;
+
+    // A single-battery device sends a one-byte T3; a longer one counts as charging when any flag is set.
+    private static ChargeState AnyCharging(byte[]? flags) => flags switch
+    {
+        null or [] => ChargeState.Unknown,
+        _ when flags.Contains((byte)1) => ChargeState.Charging,
+        _ when flags.All(f => f == 0) => ChargeState.Discharging,
+        _ => ChargeState.Unknown,
+    };
+
+    private static ChargeState Charge(byte flag) => flag switch
+    {
+        0 => ChargeState.Discharging,
+        1 => ChargeState.Charging,
+        _ => ChargeState.Unknown,
+    };
+
+    private static bool TryReadVarInt(ReadOnlySpan<byte> data, ref int index, out int value)
+    {
+        value = 0;
+        for (var groups = 0; groups < 4; groups++)
+        {
+            if (index >= data.Length) return false;
+            var b = data[index++];
+            value = (value << 7) | (b & 0x7F);
+            if ((b & 0x80) == 0) return true;
+        }
+        return false;
+    }
+
     /// <summary>Decodes the frame at the start of <paramref name="data"/>. <paramref name="frameLength"/> is the
     /// number of bytes the frame occupies when the result is <see cref="DecodeResult.Complete"/> or
     /// <see cref="DecodeResult.Sliced"/>.</summary>
@@ -103,6 +201,9 @@ public static class HuaweiProtocol
 /// <param name="Payload">The TLV bytes after the service and command ids.</param>
 /// <param name="Raw">The whole frame, magic to CRC.</param>
 public sealed record HuaweiFrame(byte Service, byte Command, byte[] Payload, byte[] Raw);
+
+/// <summary>One type-length-value entry of a frame's payload.</summary>
+public sealed record HuaweiTlv(byte Type, byte[] Value);
 
 /// <summary>Cuts an SPP byte stream into frames. Bytes before a magic byte are skipped; a candidate frame with a
 /// bad CRC or an impossible length is dropped one byte at a time until the stream lines up again (§8).</summary>
