@@ -15,6 +15,8 @@ public partial class FlyoutWindow : Window
     private static readonly TimeSpan ReopenGuard = TimeSpan.FromMilliseconds(400);
     private long _hiddenAt;
     private bool _closingForExit;
+    private IntPtr _foregroundHook;
+    private NativeMethods.WinEventProc? _foregroundChanged; // kept in a field: Windows calls it while hooked
 
     public FlyoutWindow(FlyoutViewModel viewModel)
     {
@@ -45,13 +47,32 @@ public partial class FlyoutWindow : Window
         FlyoutPositioner.Position(this);
         Activate();
         NativeMethods.SetForegroundWindow(Handle);
+        WatchForeground();
     }
 
     public void HideFlyout()
     {
+        StopWatchingForeground();
         if (!IsVisible) return;
         Hide();
         _hiddenAt = Environment.TickCount64;
+    }
+
+    // Windows may refuse to activate the flyout (no foreground rights, e.g. when opened by a second launch), and then
+    // Deactivated never comes. Any other process's window coming to the front closes it instead.
+    private void WatchForeground()
+    {
+        if (_foregroundHook != IntPtr.Zero) return;
+        _foregroundChanged ??= (_, _, _, _, _, _, _) => HideFlyout();
+        _foregroundHook = NativeMethods.SetWinEventHook(NativeMethods.EventSystemForeground, NativeMethods.EventSystemForeground,
+            IntPtr.Zero, _foregroundChanged, 0, 0, NativeMethods.WinEventOutOfContext | NativeMethods.WinEventSkipOwnProcess);
+    }
+
+    private void StopWatchingForeground()
+    {
+        if (_foregroundHook == IntPtr.Zero) return;
+        NativeMethods.UnhookWinEvent(_foregroundHook);
+        _foregroundHook = IntPtr.Zero;
     }
 
     protected override void OnKeyDown(KeyEventArgs e)
@@ -68,6 +89,7 @@ public partial class FlyoutWindow : Window
     public void CloseForExit()
     {
         _closingForExit = true;
+        StopWatchingForeground();
         Close();
     }
 
