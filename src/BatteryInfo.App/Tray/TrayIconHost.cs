@@ -5,7 +5,7 @@ using Microsoft.Win32;
 
 namespace BatteryInfo.App.Tray;
 
-/// <summary>The notification-area icon: battery glyph, tooltip summary, left click and the context menu. Create,
+/// <summary>The notification-area icon: battery glyph (full, or the first device's level), tooltip summary, left click and the context menu. Create,
 /// use and dispose it on the UI thread.</summary>
 internal sealed class TrayIconHost : IDisposable
 {
@@ -17,6 +17,8 @@ internal sealed class TrayIconHost : IDisposable
     private System.Drawing.Icon? _image;
     private bool _lightTaskbar;
     private int _imageSize;
+    private string _glyph = TrayIconRenderer.BatteryGlyph;
+    private string? _imageGlyph;
 
     public TrayIconHost(System.Windows.Threading.Dispatcher dispatcher)
     {
@@ -67,6 +69,13 @@ internal sealed class TrayIconHost : IDisposable
     /// <summary>Asked each time the menu opens, so the check mark follows the registry.</summary>
     public Func<bool>? IsStartWithWindows { get; set; }
 
+    /// <summary>Draws the battery filled to this level; null draws it full.</summary>
+    public void SetLevel(TrayLevel? level)
+    {
+        _glyph = TrayIconRenderer.GlyphFor(level);
+        UpdateIcon();
+    }
+
     /// <summary>Sets the tooltip; Windows allows at most 127 characters.</summary>
     public void SetTooltip(string text) => _icon.Text = text.Length <= TrayTooltip.MaxLength ? text : text[..TrayTooltip.MaxLength];
 
@@ -109,11 +118,12 @@ internal sealed class TrayIconHost : IDisposable
     {
         var light = TaskbarTheme.IsLight();
         var size = TrayIconRenderer.TraySize();
-        if (_image is not null && _lightTaskbar == light && _imageSize == size) return;
+        if (_image is not null && _lightTaskbar == light && _imageSize == size && _imageGlyph == _glyph) return;
         _lightTaskbar = light;
         _imageSize = size;
+        _imageGlyph = _glyph;
         var previous = _image;
-        _image = TrayIconRenderer.Render(TrayIconRenderer.BatteryGlyph, light, size);
+        _image = TrayIconRenderer.Render(_glyph, light, size);
         _icon.Icon = _image;
         previous?.Dispose();
     }

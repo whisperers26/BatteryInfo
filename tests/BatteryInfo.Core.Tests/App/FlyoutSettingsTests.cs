@@ -50,4 +50,16 @@ public class FlyoutSettingsTests
 
         Assert.Contains(nameof(FlyoutViewModel.SettingsExpanded), changed);
     }
+
+    [Fact]
+    public void The_tray_level_switch_starts_from_the_settings_and_saves_changes()
+    {
+        var services = new FakeFlyoutServices();
+        var flyout = new FlyoutViewModel(services, new AppSettings(TrayShowsLevel: true));
+        Assert.True(flyout.TrayShowsLevel);
+
+        flyout.TrayShowsLevel = false;
+
+        Assert.False(services.TrayShowsLevel);
+    }
 }

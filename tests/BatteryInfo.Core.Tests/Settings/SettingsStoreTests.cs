@@ -24,6 +24,7 @@ public sealed class SettingsStoreTests : IDisposable
         Assert.False(settings.TraceFrames);
         Assert.True(settings.AutoUpdate);
         Assert.Null(settings.DeviceOrder);
+        Assert.False(settings.TrayShowsLevel);
     }
 
     [Fact]
@@ -60,7 +61,7 @@ public sealed class SettingsStoreTests : IDisposable
     {
         var store = new SettingsStore(SettingsPath);
         var saved = new AppSettings(PollIntervalSeconds: 300, LowBatteryThreshold: 15, NotificationsEnabled: false, TraceFrames: true,
-            AutoUpdate: false);
+            AutoUpdate: false, TrayShowsLevel: true);
 
         store.Save(saved);
 

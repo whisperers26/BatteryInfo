@@ -43,6 +43,7 @@ public partial class App : Application, IFlyoutServices
     private LowBatteryNotifier? _notifier;
     private Updater? _updater;
     private StartWithWindowsSwitch? _startWithWindows;
+    private IReadOnlyList<DeviceState> _shown = [];
 
     // Before WPF or WinForms create any window, so both lay out per monitor. This constructor must not mention
     // other WPF types: compiling it would load WPF, which fixes the DPI awareness first.
@@ -234,10 +235,14 @@ public partial class App : Application, IFlyoutServices
     {
         // Only connected devices are listed; history and alerts still see every device.
         var connected = DeviceOrder.Sort(ConnectedDevices.Filter(snapshot), _settings.DeviceOrder ?? []);
+        _shown = connected;
         _tray?.SetTooltip(TrayTooltip.Build(connected));
+        UpdateTrayLevel();
         _flyoutViewModel?.Update(connected, _monitor?.LastRefresh);
         _notifier?.Process(snapshot);
     }
+
+    private void UpdateTrayLevel() => _tray?.SetLevel(_settings.TrayShowsLevel ? TrayLevel.First(_shown) : null);
 
     private void ToggleFlyout()
     {
@@ -301,8 +306,18 @@ public partial class App : Application, IFlyoutServices
 
     void IFlyoutServices.RunUpdateAction() => RunUpdateAction();
 
-    void IFlyoutServices.SetDeviceOrder(IReadOnlyList<string> shown) =>
+    void IFlyoutServices.SetDeviceOrder(IReadOnlyList<string> shown)
+    {
         UpdateSettings(_settings with { DeviceOrder = DeviceOrder.Merge(_settings.DeviceOrder ?? [], shown) });
+        _shown = DeviceOrder.Sort(_shown, _settings.DeviceOrder ?? []);
+        UpdateTrayLevel();
+    }
+
+    void IFlyoutServices.SetTrayShowsLevel(bool enabled)
+    {
+        UpdateSettings(_settings with { TrayShowsLevel = enabled });
+        UpdateTrayLevel();
+    }
 
     void IFlyoutServices.SetNotificationsEnabled(bool enabled)
     {
