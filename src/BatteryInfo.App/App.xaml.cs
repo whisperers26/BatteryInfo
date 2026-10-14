@@ -130,6 +130,7 @@ public partial class App : Application, IFlyoutServices
             Threshold = _settings.LowBatteryThreshold,
             Enabled = _settings.NotificationsEnabled,
         };
+        WarnIfRedirected();
         StartUpdater();
         _instance?.ListenForShowRequests(() => Dispatcher.BeginInvoke(ShowFlyout));
         // publish.ps1 asks before it replaces this copy: shutting down here lets OnExit remove the tray icon.
@@ -143,6 +144,15 @@ public partial class App : Application, IFlyoutServices
         ApplySnapshot(store.Snapshot());
         _ = _monitor.Start();
         if (_options.ShowFlyout) Dispatcher.BeginInvoke(DispatcherPriority.ApplicationIdle, ShowFlyout);
+    }
+
+    // A copy installed or started from inside another app's container works, but Windows cannot see it. The demo is
+    // only ever started by hand, so it says nothing.
+    private void WarnIfRedirected()
+    {
+        if (_options.Demo || RedirectedInstall.Current() is not { } package) return;
+        Log.Warn($"Running inside the {package} package's container: Windows cannot see this copy");
+        _tray?.ShowWarning(RedirectedInstall.Title, RedirectedInstall.Message(package));
     }
 
     // Updates come from this repository's GitHub releases. A local build (not installed through Setup.exe) reports
