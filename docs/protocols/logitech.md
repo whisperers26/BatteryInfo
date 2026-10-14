@@ -85,7 +85,10 @@ g) HID++ 2.0 ping to the receiver: 10 FF 00 1C 00 00 81 returns 10 FF 8F 00 1C 0
 - ONLINE HID++ 2.0+: 11 nn 00 (0x10|sw) MAJ MIN MARK ...
   Observed 11 01 00 1E 04 02 A2 (HID++ 4.2). The first ping after idle took 25 ms; later pings 5-8 ms.
 - HID++ 1.0 error 10 nn 8F 00 (0x10|sw) EE 00, by error code EE:
-  * 0x08 UNKNOWN_DEVICE: nothing paired in that slot (verified for slots 2-6).
+  * 0x08 UNKNOWN_DEVICE: on a slot with no pairing info (B5/2n errors), nothing is paired (verified for slots 2-6).
+    On a slot the receiver lists as paired, it means the device is not connected: show it as asleep/off
+    (seen live 2026-10-14 13:39-14:24: B5/20 lists wpid 40BD, ping gets `10 01 8F 00 1C 08 00` in about 25 ms,
+    while register 0x02 still reports one connected device, so 0x02 is not an online signal).
   * 0x09 RESOURCE_ERROR or 0x04 CONNECT_FAIL: paired but unreachable (off, asleep or out of range). Treat as offline. This is Solaar and kernel behaviour, NOT observed on this hardware.
   * 0x01 INVALID_SUB_ID: a HID++ 1.0 device is online.
 - No reply within about 2.5 s: treat as offline.
@@ -202,7 +205,8 @@ E) HID++ 1.0 devices (ping answered with error 0x01)
 
 11. SAFETY WHITELIST (everything this design sends is a read)
 - Receiver: 0x81 / 0x83 only.
-- IRoot fn0/fn1; 0x0001 fn0/1; 0x0003 fn0/1; 0x0005 fn0/1/2; 0x0007 fn0/1; 0x1000 fn0/1; 0x1001 fn0; 0x1004 fn0/1; 0x1F20 fn0.
+- IRoot fn0/fn1; 0x0001 fn0/1; 0x0003 fn0/1; 0x0005 fn0/1/2; 0x1000 fn0/1; 0x1001 fn0; 0x1004 fn0/1; 0x1F20 fn0.
+  (0x0007 fn0/1 are reads too, but the provider never needs them, so its policy refuses them.)
 - Never send set functions (for example 0x1004 fn2+, 0x1000 fn2+, 0x0007 fn3) or register writes (0x80/0x82). This includes:
   * 10 FF 80 00 .. (notification flags), which Solaar and the kernel send.
   * 10 FF 80 02 02 00 00 ('force arrival announce'), which LGSTrayBattery sends.
