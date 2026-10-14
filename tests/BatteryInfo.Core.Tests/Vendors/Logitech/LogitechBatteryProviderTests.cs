@@ -372,6 +372,221 @@ public class LogitechBatteryProviderTests
         Assert.Equal([BatteryComponent.Single(20, ChargeState.Charging)], keyboard.Components);
     }
 
+    // Feature-index cache
+
+    [Fact]
+    public async Task Second_poll_reuses_resolved_features_and_only_re_checks_the_battery_index()
+    {
+        _receiver.Pair(1);
+        await PollSingle();
+        var lookups = _receiver.FeatureLookups;
+        var nameCalls = _receiver.CallsTo(0x01, 0x03, 0) + _receiver.CallsTo(0x01, 0x03, 1) + _receiver.CallsTo(0x01, 0x03, 2);
+        var infoCalls = _receiver.CallsTo(0x01, 0x02, 0);
+        var capabilityCalls = _receiver.CallsTo(0x01, 0x06, 0);
+
+        var reading = await PollSingle();
+
+        Assert.Equal(lookups + 1, _receiver.FeatureLookups);
+        Assert.Contains(_receiver.Requests.TakeLast(3), f => f.SequenceEqual(new byte[] { 0x10, 0x01, 0x00, 0x0C, 0x10, 0x04, 0x00 }));
+        Assert.Equal(nameCalls, _receiver.CallsTo(0x01, 0x03, 0) + _receiver.CallsTo(0x01, 0x03, 1) + _receiver.CallsTo(0x01, 0x03, 2));
+        Assert.Equal(infoCalls, _receiver.CallsTo(0x01, 0x02, 0));
+        Assert.Equal(capabilityCalls, _receiver.CallsTo(0x01, 0x06, 0));
+        Assert.Equal("PRO X2 SUPERSTRIKE", reading.Name);
+        Assert.Equal("logitech:B4655832", reading.DeviceId);
+        Assert.Equal(56, reading.Components[0].Percent);
+    }
+
+    [Fact]
+    public async Task Device_that_stops_answering_mid_resolution_is_resolved_again_next_time()
+    {
+        var device = _receiver.Pair(1);
+        _receiver.Noise = frame =>
+        {
+            if (frame[2] == 0x03 && frame[3] >> 4 == 0) device.Link = FakeLink.Silent;
+            return [];
+        };
+        var first = await PollSingle();
+        _receiver.Noise = null;
+        device.Link = FakeLink.Online;
+        var lookups = _receiver.FeatureLookups;
+
+        var second = await PollSingle();
+
+        Assert.Equal(DeviceStatus.Asleep, first.Status);
+        Assert.True(_receiver.FeatureLookups - lookups > 2);
+        Assert.Equal("PRO X2 SUPERSTRIKE", second.Name);
+        Assert.Equal(56, second.Components[0].Percent);
+    }
+
+    [Fact]
+    public async Task Moved_battery_index_is_detected_before_any_call_to_it()
+    {
+        var device = _receiver.Pair(1);
+        await PollSingle();
+        device.MoveFeature(0x1004, 0x07);
+        var oldIndexCalls = _receiver.CallsTo(0x01, 0x06, 1);
+
+        var reading = await PollSingle();
+
+        Assert.Equal(56, reading.Components[0].Percent);
+        Assert.Equal(oldIndexCalls, _receiver.CallsTo(0x01, 0x06, 1));
+        Assert.Equal(1, _receiver.CallsTo(0x01, 0x07, 1));
+    }
+
+    [Fact]
+    public async Task Invalid_feature_index_error_re_resolves_and_retries_once()
+    {
+        var device = _receiver.Pair(1);
+        await PollSingle();
+        var lookups = _receiver.FeatureLookups;
+        device.NextErrors.Enqueue(0x06);
+
+        var reading = await PollSingle();
+
+        Assert.Equal(DeviceStatus.Online, reading.Status);
+        Assert.Equal(56, reading.Components[0].Percent);
+        Assert.True(_receiver.FeatureLookups - lookups > 2);
+    }
+
+    [Fact]
+    public async Task Repeated_invalid_feature_index_is_an_error_and_re_resolves_next_time()
+    {
+        var device = _receiver.Pair(1);
+        await PollSingle();
+        device.NextErrors.Enqueue(0x06);
+        device.NextErrors.Enqueue(0x06);
+
+        var failed = await PollSingle();
+        var lookups = _receiver.FeatureLookups;
+        var recovered = await PollSingle();
+
+        Assert.Equal(DeviceStatus.Error, failed.Status);
+        Assert.Equal("logitech:B4655832", failed.DeviceId);
+        Assert.Equal(DeviceStatus.Online, recovered.Status);
+        Assert.True(_receiver.FeatureLookups - lookups > 2);
+    }
+
+    [Theory]
+    [InlineData(true, "11 01 04 00 01 01 01")]  // 0x1D4B event: reconnected
+    [InlineData(false, "10 01 41 0C 02 BD 40")] // receiver 0x41: link established
+    public async Task Reconnect_seen_during_a_poll_makes_the_next_poll_re_resolve(bool onLong, string hex)
+    {
+        _receiver.Pair(1);
+        await PollSingle();
+        var report = Long(hex)[..(onLong ? 20 : 7)];
+        _receiver.Noise = frame => frame[2] == 0x00 && frame[3] >> 4 == 1 ? [(onLong, report)] : [];
+        await PollSingle();
+        _receiver.Noise = null;
+        var lookups = _receiver.FeatureLookups;
+
+        var reading = await PollSingle();
+
+        Assert.Equal(56, reading.Components[0].Percent);
+        Assert.True(_receiver.FeatureLookups - lookups > 2);
+    }
+
+    [Fact]
+    public async Task Reconnect_event_with_another_status_is_ignored()
+    {
+        _receiver.Pair(1);
+        await PollSingle();
+        _receiver.Noise = frame => frame[2] == 0x00 && frame[3] >> 4 == 1 ? [(true, Long("11 01 04 00 00 00 00"))] : [];
+        await PollSingle();
+        var lookups = _receiver.FeatureLookups;
+
+        await PollSingle();
+
+        Assert.Equal(lookups + 1, _receiver.FeatureLookups);
+    }
+
+    [Fact]
+    public async Task Another_device_in_the_slot_is_resolved_from_scratch()
+    {
+        _receiver.Pair(1);
+        await PollSingle();
+        _receiver.Pair(1, new FakeHidppDevice { UnitId = 0x11111111, Wpid = 0x4074, Name = "G305", UnifiedStatus = [0x50, 0x04, 0x00, 0x00] });
+
+        var reading = await PollSingle();
+
+        Assert.Equal("logitech:11111111", reading.DeviceId);
+        Assert.Equal("G305", reading.Name);
+        Assert.Equal(80, reading.Components[0].Percent);
+    }
+
+    [Fact]
+    public async Task Asleep_after_online_keeps_the_name_learnt_from_the_device()
+    {
+        var device = _receiver.Pair(1);
+        device.Wpid = 0x4099;
+        device.Name = "G502 X PLUS";
+        device.Codename = "G502 X";
+        await PollSingle();
+        device.Link = FakeLink.Asleep;
+
+        var reading = await PollSingle();
+
+        Assert.Equal(DeviceStatus.Asleep, reading.Status);
+        Assert.Equal("G502 X PLUS", reading.Name);
+        Assert.Equal("logitech:B4655832", reading.DeviceId);
+        Assert.DoesNotContain(_receiver.Requests, f => f[2] == 0x83 && f[4] == 0x40);
+    }
+
+    [Fact]
+    public async Task Replugged_receiver_is_resolved_from_scratch()
+    {
+        _receiver.Pair(1);
+        await PollSingle();
+        _backend.Devices.Remove(_receiver.Short);
+        _backend.Devices.Remove(_receiver.Long);
+        Assert.Empty(await _provider.PollAsync(CancellationToken.None));
+        _backend.Devices.Add(_receiver.Short);
+        _backend.Devices.Add(_receiver.Long);
+        var lookups = _receiver.FeatureLookups;
+
+        await PollSingle();
+
+        Assert.True(_receiver.FeatureLookups - lookups > 2);
+    }
+
+    [Fact]
+    public async Task Access_denied_after_a_good_poll_reports_the_known_devices()
+    {
+        _receiver.Pair(1);
+        await PollSingle();
+        _receiver.Short.OpenError = new HidIoException("CreateFile", 5);
+
+        var reading = await PollSingle();
+
+        Assert.Equal("logitech:B4655832", reading.DeviceId);
+        Assert.Equal("PRO X2 SUPERSTRIKE", reading.Name);
+        Assert.Equal(DeviceStatus.NeedsAccess, reading.Status);
+    }
+
+    [Fact]
+    public async Task Hung_receiver_reports_the_known_devices_asleep()
+    {
+        _receiver.Pair(1);
+        await PollSingle();
+        _receiver.Silent = true;
+
+        var reading = await PollSingle();
+
+        Assert.Equal("logitech:B4655832", reading.DeviceId);
+        Assert.Equal(DeviceStatus.Asleep, reading.Status);
+    }
+
+    [Fact]
+    public async Task Unpaired_slot_is_forgotten()
+    {
+        _receiver.Pair(1);
+        await PollSingle();
+        _receiver.Slots.Clear();
+
+        Assert.Empty(await _provider.PollAsync(CancellationToken.None));
+        _receiver.Silent = true;
+        Assert.Empty(await _provider.PollAsync(CancellationToken.None));
+    }
+
     [Fact]
     public async Task Other_vendors_devices_are_never_opened()
     {

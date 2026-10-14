@@ -92,6 +92,9 @@ internal sealed class FakeHidppReceiver
 
     public byte MaxDevices { get; set; } = 2;
 
+    /// <summary>Nothing answers at all (a hung receiver).</summary>
+    public bool Silent { get; set; }
+
     /// <summary>Paired devices by slot; a wired device sits at 0xFF.</summary>
     public Dictionary<byte, FakeHidppDevice> Slots { get; } = [];
 
@@ -113,6 +116,7 @@ internal sealed class FakeHidppReceiver
         {
             foreach (var (onLong, report) in noise) (onLong ? Long : Short).Enqueue(report);
         }
+        if (Silent) return;
 
         var deviceIndex = frame[1];
         if (!Wired && deviceIndex == 0xFF)

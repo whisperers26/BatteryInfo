@@ -10,7 +10,11 @@ namespace BatteryInfo.Core.Vendors.Logitech;
 /// receiver the B5 registers list the paired slots; each slot is pinged, its features are resolved with IRoot, and the
 /// battery is read from 0x1004 (else 0x1000, 0x1001, 0x1F20). Every frame goes through
 /// <see cref="GuardedHidConnection"/> with the <see cref="LogitechCommandPolicy"/>, which only allows a feature call
-/// once this provider has registered the feature id it resolved for that index.</summary>
+/// once this provider has registered the feature id it resolved for that index.
+/// <para>Resolved features, name and unit id are cached per device and reused by later polls, which then only ping,
+/// re-check the battery feature's index with IRoot, and read the battery. The cache is dropped when the receiver
+/// reports another device in the slot or disappears, and its feature indexes when the device reconnects (0x1D4B
+/// event, receiver 0x41 notification, new protocol version), reports error 6, or the battery index moved.</para></summary>
 public sealed class LogitechBatteryProvider : IBatteryProvider
 {
     /// <summary>The HID++ software id in every request. 0x0C is not used by the Logitech tools known to share the
@@ -33,6 +37,7 @@ public sealed class LogitechBatteryProvider : IBatteryProvider
     private readonly HidppTimings _timings;
     private readonly LogitechCommandPolicy _policy = new();
     private readonly object _gate = new();
+    private readonly Dictionary<(string Channel, byte Index), KnownDevice> _devices = [];
 
     public LogitechBatteryProvider()
         : this(new WindowsHidBackend())
@@ -79,8 +84,11 @@ public sealed class LogitechBatteryProvider : IBatteryProvider
     private IReadOnlyList<DeviceReading> Poll(CancellationToken ct)
     {
         ct.ThrowIfCancellationRequested();
+        var channels = HidppChannel.Pair(_hid.Enumerate(LogitechModels.IsHidppProduct));
+        ForgetAbsentChannels(channels);
+
         var readings = new List<DeviceReading>();
-        foreach (var collections in HidppChannel.Pair(_hid.Enumerate(LogitechModels.IsHidppProduct)))
+        foreach (var collections in channels)
         {
             ct.ThrowIfCancellationRequested();
             readings.AddRange(PollChannel(collections, ct));
@@ -102,6 +110,7 @@ public sealed class LogitechBatteryProvider : IBatteryProvider
 
         var readings = new List<DeviceReading>();
         var poll = new ChannelPoll(channel, collections);
+        channel.Unsolicited += report => OnUnsolicited(poll, report);
         using (channel)
         {
             try
@@ -123,8 +132,72 @@ public sealed class LogitechBatteryProvider : IBatteryProvider
                 readings.Add(ChannelReading(collections, DeviceStatus.Error, "Internal error: unsafe command refused"));
             }
         }
+
+        foreach (var index in poll.Reconnected)
+        {
+            if (_devices.TryGetValue((collections.Key, index), out var known)) ForgetFeatures(known);
+        }
         return readings;
     }
+
+    // Seen while waiting for our replies: a reconnect means the device may have new firmware and feature indexes.
+    private void OnUnsolicited(ChannelPoll poll, byte[] report)
+    {
+        if (HidppProtocol.TryParseConnectionNotification(report, out var index, out var linkEstablished))
+        {
+            Log.Info($"Logitech device {index}: link {(linkEstablished ? "established" : "lost")}");
+            poll.Reconnected.Add(index);
+        }
+        else if (HidppProtocol.TryParseFeatureEvent(report, out index, out _, out _)
+            && _devices.TryGetValue((poll.Collections.Key, index), out var known)
+            && known.Features?.GetValueOrDefault(HidppFeature.WirelessDeviceStatus) is { } wirelessIndex
+            && HidppProtocol.IsReconnectEvent(report, wirelessIndex))
+        {
+            Log.Info($"Logitech device {index}: reconnected");
+            poll.Reconnected.Add(index);
+        }
+    }
+
+    private void ForgetAbsentChannels(IReadOnlyList<HidppCollections> present)
+    {
+        var keys = present.Select(c => c.Key).ToHashSet();
+        foreach (var key in _devices.Keys.Where(k => !keys.Contains(k.Channel)).ToList())
+        {
+            _devices.Remove(key);
+            _policy.ForgetChannel(key.Channel);
+        }
+    }
+
+    // The cached device at this index, or a new one when the receiver reports a different device there.
+    private KnownDevice Remember(HidppCollections collections, byte index, SlotIdentity identity)
+    {
+        if (_devices.TryGetValue((collections.Key, index), out var known))
+        {
+            if (known.Identity == identity) return known;
+            Log.Info($"Logitech device {index}: another device is paired in this slot now");
+            ForgetFeatures(known);
+        }
+        known = new KnownDevice(collections.Key, collections.Short.ProductId, index, identity);
+        _devices[(collections.Key, index)] = known;
+        return known;
+    }
+
+    private void Forget(KnownDevice known)
+    {
+        ForgetFeatures(known);
+        _devices.Remove((known.Channel, known.Index));
+    }
+
+    private void ForgetFeatures(KnownDevice known)
+    {
+        known.Features = null;
+        known.BatteryFeature = null;
+        known.Capabilities = null;
+        _policy.ForgetDevice(known.Channel, known.Index);
+    }
+
+    private List<KnownDevice> KnownOn(HidppCollections collections) =>
+        _devices.Values.Where(d => d.Channel == collections.Key).OrderBy(d => d.Index).ToList();
 
     private HidppChannel Open(HidppCollections collections)
     {
@@ -145,9 +218,11 @@ public sealed class LogitechBatteryProvider : IBatteryProvider
     {
         if (e.DeviceGone) return [];
         Log.Warn($"Cannot open Logitech {collections.Short.Label}: {e.Message}");
-        return e.Win32Error == HidIoException.AccessDenied
-            ? [ChannelReading(collections, DeviceStatus.NeedsAccess, "Windows denied access to the receiver")]
-            : [ChannelReading(collections, DeviceStatus.Error, $"Cannot open the receiver (Win32 error {e.Win32Error})")];
+        var (status, detail) = e.Win32Error == HidIoException.AccessDenied
+            ? (DeviceStatus.NeedsAccess, "Windows denied access to the receiver")
+            : (DeviceStatus.Error, $"Cannot open the receiver (Win32 error {e.Win32Error})");
+        var known = KnownOn(collections).Select(k => Reading(k, status, GenericSource, detail: detail)).ToList();
+        return known.Count > 0 ? known : [ChannelReading(collections, status, detail)];
     }
 
     // B5/03 for the slot count, then per slot B5/2n (empty slot: 0x8F error) and B5/3n for the device serial.
@@ -157,6 +232,7 @@ public sealed class LogitechBatteryProvider : IBatteryProvider
         if (info.TimedOut)
         {
             Log.Warn($"Logitech {poll.Collections.Short.Label}: the receiver does not answer register reads");
+            readings.AddRange(KnownOn(poll.Collections).Select(k => Reading(k, DeviceStatus.Asleep, GenericSource, detail: "Receiver not responding")));
             return;
         }
 
@@ -173,15 +249,18 @@ public sealed class LogitechBatteryProvider : IBatteryProvider
         {
             ct.ThrowIfCancellationRequested();
             var pairing = poll.Channel.Send(HidppProtocol.ReadReceiverInfo((byte)(0x20 + slot - 1)), _timings.Register);
-            if (pairing.Kind != HidppMatchKind.Reply) continue;
+            if (pairing.Kind != HidppMatchKind.Reply)
+            {
+                if (_devices.TryGetValue((poll.Collections.Key, (byte)slot), out var unpaired)) Forget(unpaired);
+                continue;
+            }
             var pairingInfo = HidppProtocol.ParsePairingInfo(pairing.Report);
 
             var extended = poll.Channel.Send(HidppProtocol.ReadReceiverInfo((byte)(0x30 + slot - 1)), _timings.Register);
             uint? serial = extended.Kind == HidppMatchKind.Reply ? HidppProtocol.ParseExtendedPairingSerial(extended.Report) : null;
 
             var identity = new SlotIdentity(receiverSerial, serial, pairingInfo.Wpid, pairingInfo.Kind);
-            var known = new KnownDevice(poll.Collections.Key, poll.Collections.Short.ProductId, (byte)slot, identity);
-            if (ReadDevice(poll, known, ct) is { } reading) readings.Add(reading);
+            if (ReadDevice(poll, Remember(poll.Collections, (byte)slot, identity), ct) is { } reading) readings.Add(reading);
         }
     }
 
@@ -195,16 +274,17 @@ public sealed class LogitechBatteryProvider : IBatteryProvider
                 case HidppMatchKind.None:
                     return Asleep(poll, known, NotResponding);
                 case HidppMatchKind.Hidpp10Error when ping.ErrorCode == HidppProtocol.ErrorUnknownDevice:
+                    Forget(known);
                     return null;
                 case HidppMatchKind.Hidpp10Error or HidppMatchKind.Hidpp20Error:
                     return Asleep(poll, known, NotResponding);
             }
 
-            known.Protocol = HidppProtocol.ParsePingReply(ping.Report);
+            var protocol = HidppProtocol.ParsePingReply(ping.Report);
+            if (known.Protocol is { } previous && previous != protocol) ForgetFeatures(known);
+            known.Protocol = protocol;
             ct.ThrowIfCancellationRequested();
-            Resolve(poll, known, ct);
-            ct.ThrowIfCancellationRequested();
-            return ReadBattery(poll, known);
+            return ReadHidpp20(poll, known, ct);
         }
         catch (HidppFailure f) when (f.Kind == FailureKind.NotResponding)
         {
@@ -212,11 +292,13 @@ public sealed class LogitechBatteryProvider : IBatteryProvider
         }
         catch (HidppFailure f)
         {
+            if (f.Kind == FailureKind.StaleIndex) ForgetFeatures(known);
             return Reading(known, DeviceStatus.Error, GenericSource, detail: f.Message);
         }
         catch (UnsafeCommandException e)
         {
             Log.Error($"Logitech device {known.Index}: a frame was refused by the allow-list", e);
+            ForgetFeatures(known);
             return Reading(known, DeviceStatus.Error, GenericSource, detail: "Internal error: unsafe command refused");
         }
         catch (HidIoException e) when (e.DeviceGone)
@@ -229,6 +311,38 @@ public sealed class LogitechBatteryProvider : IBatteryProvider
             Log.Warn($"Logitech device {known.Index}: {e.Message}");
             return Reading(known, DeviceStatus.Error, GenericSource, detail: $"I/O error (Win32 error {e.Win32Error})");
         }
+    }
+
+    // Features from the cache (after checking the battery index still holds the same feature) or resolved now. Error 6
+    // drops the cache and retries once.
+    private DeviceReading ReadHidpp20(ChannelPoll poll, KnownDevice known, CancellationToken ct)
+    {
+        for (var attempt = 0; ; attempt++)
+        {
+            try
+            {
+                if (known.Features is not null && !BatteryIndexUnchanged(poll, known))
+                {
+                    Log.Info($"Logitech device {known.Index}: battery feature index moved; resolving features again");
+                    ForgetFeatures(known);
+                }
+                if (known.Features is null) Resolve(poll, known, ct);
+                ct.ThrowIfCancellationRequested();
+                return ReadBattery(poll, known);
+            }
+            catch (HidppFailure f) when (f.Kind == FailureKind.StaleIndex && attempt == 0)
+            {
+                Log.Info($"Logitech device {known.Index}: stale feature index; resolving features again");
+                ForgetFeatures(known);
+            }
+        }
+    }
+
+    private bool BatteryIndexUnchanged(ChannelPoll poll, KnownDevice known)
+    {
+        if (known.BatteryFeature is not { } feature) return true;
+        var reply = Optional(() => Call(poll, HidppProtocol.GetFeature(known.Index, feature, SoftwareId)));
+        return reply is not null && HidppProtocol.ParseFeatureInfo(reply).Index == known.Features![feature];
     }
 
     // IRoot getFeature for the info, name and battery features; registers each index with the policy before any
@@ -257,14 +371,13 @@ public sealed class LogitechBatteryProvider : IBatteryProvider
         Lookup(HidppFeature.DeviceFwInfo);
         Lookup(HidppFeature.DeviceName);
         Lookup(HidppFeature.WirelessDeviceStatus);
-        known.BatteryFeature = null;
+        ushort? battery = null;
         foreach (var feature in BatteryFeatures)
         {
             if (!Lookup(feature)) continue;
-            known.BatteryFeature = feature;
+            battery = feature;
             break;
         }
-        known.Features = features;
 
         if (features.TryGetValue(HidppFeature.DeviceFwInfo, out var fwIndex)
             && Optional(() => Call(poll, Request(known, fwIndex, 0))) is { } info)
@@ -279,11 +392,14 @@ public sealed class LogitechBatteryProvider : IBatteryProvider
             if (Optional(() => Call(poll, Request(known, nameIndex, 2))) is { } type)
                 known.Kind = HidppProtocol.KindFromDeviceType(HidppProtocol.ParseDeviceType(type));
         }
-        known.Capabilities = known.BatteryFeature == HidppFeature.UnifiedBattery
+        known.Capabilities = battery == HidppFeature.UnifiedBattery
             && Optional(() => Call(poll, Request(known, features[HidppFeature.UnifiedBattery], 0))) is { } caps
                 ? HidppProtocol.ParseUnifiedCapabilities(caps)
                 : null;
 
+        // Cached only once everything above answered, so a device that stops mid-way is resolved again next time.
+        known.BatteryFeature = battery;
+        known.Features = features;
         Log.Info($"Logitech device {known.Index} ({known.Name ?? "unnamed"}): HID++ {known.Protocol?.Major}.{known.Protocol?.Minor}, features "
             + string.Join(", ", features.Select(f => $"{f.Key:X4}@{f.Value:X2}")));
     }
@@ -485,5 +601,8 @@ public sealed class LogitechBatteryProvider : IBatteryProvider
 
         /// <summary>The receiver went away during this poll: no more I/O on it.</summary>
         public bool Gone { get; set; }
+
+        /// <summary>Device indexes that reconnected while this poll was running.</summary>
+        public HashSet<byte> Reconnected { get; } = [];
     }
 }
