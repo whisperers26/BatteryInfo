@@ -32,6 +32,9 @@ public sealed class RogBatteryProvider : IBatteryProvider
     private readonly ICommandPolicy _policy;
     private readonly object _gate = new();
 
+    // The devices each receiver listed in its last good scan, keyed by the receiver's USB interface.
+    private readonly Dictionary<string, List<ListedDevice>> _listed = new(StringComparer.OrdinalIgnoreCase);
+
     public RogBatteryProvider()
         : this(new WindowsHidBackend())
     {
@@ -108,13 +111,13 @@ public sealed class RogBatteryProvider : IBatteryProvider
             if (scan.Outcome != RogOutcome.Reply)
             {
                 Log.Warn($"ROG: {receiver.Label} did not answer the device scan ({scan.Outcome}).");
-                return [ReceiverReading(model, serial ?? ProductIdText(receiver.ProductId), DeviceStatus.Error, "Receiver did not answer")];
+                return ReceiverFailed(receiver, model, serial, DeviceStatus.Error, "Receiver did not answer");
             }
             slots = RogProtocol.ParseScan(scan.Report);
         }
         catch (HidIoException e) when (e.Win32Error == HidIoException.AccessDenied)
         {
-            return [ReceiverReading(model, serial ?? ProductIdText(receiver.ProductId), DeviceStatus.NeedsAccess, "Windows denied access to the receiver")];
+            return ReceiverFailed(receiver, model, serial, DeviceStatus.NeedsAccess, "Windows denied access to the receiver");
         }
         catch (HidIoException e) when (e.DeviceGone)
         {
@@ -124,21 +127,24 @@ public sealed class RogBatteryProvider : IBatteryProvider
         catch (HidIoException e)
         {
             Log.Warn($"ROG: scanning {receiver.Label} failed: {e.Message}");
-            return [ReceiverReading(model, serial ?? ProductIdText(receiver.ProductId), DeviceStatus.Error, IoDetail(e))];
+            return ReceiverFailed(receiver, model, serial, DeviceStatus.Error, IoDetail(e));
         }
         catch (UnsafeCommandException e)
         {
             Log.Error($"ROG: a command to {receiver.Label} was refused", e);
-            return [ReceiverReading(model, serial ?? ProductIdText(receiver.ProductId), DeviceStatus.Error, UnsafeDetail)];
+            return ReceiverFailed(receiver, model, serial, DeviceStatus.Error, UnsafeDetail);
         }
 
         serial ??= ProductIdText(receiver.ProductId);
+        _listed[ReceiverKey(receiver)] =
+            [.. slots.Select(RogModels.ForSlot).Where(IsSlotDevice).Select(m => new ListedDevice(DeviceId(m, serial), m))];
+
         var readings = new List<DeviceReading>();
         foreach (var slot in slots)
         {
             cancellationToken.ThrowIfCancellationRequested();
             var slotModel = RogModels.ForSlot(slot);
-            if (slotModel.Kind is not (DeviceKind.Keyboard or DeviceKind.Mouse))
+            if (!IsSlotDevice(slotModel))
             {
                 Log.Warn($"ROG: {receiver.Label} lists device {slot.ProductId:X4} on unknown report {slot.ControlReportId}; skipped.");
                 continue;
@@ -164,9 +170,21 @@ public sealed class RogBatteryProvider : IBatteryProvider
         return reply.Outcome == RogOutcome.Reply ? CleanSerial(RogProtocol.ParseSerial(reply.Report)) : null;
     }
 
+    // A receiver that could not be scanned: the devices it listed last time carry its failure, so they are not shown as
+    // disconnected. Only when it has listed none yet (such as the first poll since start-up) is the receiver reported.
+    private List<DeviceReading> ReceiverFailed(HidDeviceInfo receiver, RogModel model, string? serial, DeviceStatus status,
+        string detail) =>
+        _listed.TryGetValue(ReceiverKey(receiver), out var listed) && listed.Count > 0
+            ? [.. listed.Select(d => Reading(d.Id, d.Model, status, [], detail))]
+            : [ReceiverReading(model, serial ?? ProductIdText(receiver.ProductId), status, detail)];
+
     private DeviceReading ReceiverReading(RogModel receiver, string serial, DeviceStatus status, string detail) =>
         new(DeviceId(receiver, serial), VendorName, receiver.Name, DeviceKind.Other, status, [], _time.GetUtcNow(), "ROG A0 00",
             Detail: detail);
+
+    private static string ReceiverKey(HidDeviceInfo receiver) => receiver.ParentInstanceId ?? receiver.Path;
+
+    private static bool IsSlotDevice(RogModel model) => model.Kind is DeviceKind.Keyboard or DeviceKind.Mouse;
 
     // --- One device on one control collection ---
 
@@ -383,6 +401,8 @@ public sealed class RogBatteryProvider : IBatteryProvider
     };
 
     private static string IoDetail(HidIoException e) => $"Read failed (error {e.Win32Error})";
+
+    private readonly record struct ListedDevice(string Id, RogModel Model);
 }
 
 internal enum RogOutcome
