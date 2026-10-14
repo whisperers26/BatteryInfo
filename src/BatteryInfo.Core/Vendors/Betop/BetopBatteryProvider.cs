@@ -1,3 +1,4 @@
+using BatteryInfo.Core.Diagnostics;
 using BatteryInfo.Core.Hid;
 using BatteryInfo.Core.Model;
 using BatteryInfo.Core.Monitoring;
@@ -11,6 +12,7 @@ public sealed class BetopBatteryProvider : IBatteryProvider
 {
     private const string SourceName = "Betop 0x15";
     private const int Attempts = 3; // one request and up to two retries
+    private const int ErrorFileNotFound = 2; // CreateFile on a path removed since enumeration
     private static readonly TimeSpan ReplyTimeout = TimeSpan.FromMilliseconds(500);
 
     private readonly IHidBackend _hid;
@@ -118,7 +120,37 @@ public sealed class BetopBatteryProvider : IBatteryProvider
         return reading!;
     }
 
+    // Device-level failures become statuses; only cancellation and bugs other than a refused frame escape.
     private DeviceReading ReadCollection(BetopModel model, HidDeviceInfo device, CancellationToken cancellationToken)
+    {
+        try
+        {
+            return QueryBattery(model, device, cancellationToken);
+        }
+        catch (HidIoException e) when (e.Win32Error == HidIoException.AccessDenied)
+        {
+            Log.Warn($"Betop {model.Name}: {e.Message}");
+            return Reading(model, DeviceStatus.NeedsAccess, [], "Windows denied access to the controller");
+        }
+        catch (HidIoException e) when (e.DeviceGone || e.Win32Error == ErrorFileNotFound)
+        {
+            // The pad fell asleep (the dongle drops 20BC and re-enumerates as 20DD) or was unplugged mid-poll.
+            Log.Info($"Betop {model.Name} went away: {e.Message}");
+            return Reading(model, DeviceStatus.Asleep, [], "Controller asleep or disconnected");
+        }
+        catch (HidIoException e)
+        {
+            Log.Warn($"Betop {model.Name}: {e.Message}");
+            return Reading(model, DeviceStatus.Error, [], $"Could not read the controller (error {e.Win32Error})");
+        }
+        catch (UnsafeCommandException e)
+        {
+            Log.Error($"Betop {model.Name}: a frame was refused by the allow-list", e);
+            return Reading(model, DeviceStatus.Error, [], "Internal error: unsafe command refused");
+        }
+    }
+
+    private DeviceReading QueryBattery(BetopModel model, HidDeviceInfo device, CancellationToken cancellationToken)
     {
         // The safety gate: 20DD:518D has a vendor collection identical to 20BC's, so only the VID tells the asleep
         // (and firmware-update) dongle apart. Nothing but 20BC is ever opened for writing.

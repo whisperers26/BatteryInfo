@@ -1,3 +1,4 @@
+using BatteryInfo.Core.Diagnostics;
 using BatteryInfo.Core.Hid;
 using BatteryInfo.Core.Model;
 using BatteryInfo.Core.Tests.Fakes;
@@ -274,6 +275,111 @@ public class BetopBatteryProviderTests
         Assert.Empty(Poll(Provider()));
 
         Assert.Empty(kp50c.Opens);
+    }
+
+    [Theory]
+    [InlineData(1167)] // ERROR_DEVICE_NOT_CONNECTED: the dongle dropped 20BC as the pad fell asleep
+    [InlineData(6)]    // ERROR_INVALID_HANDLE
+    [InlineData(995)]  // ERROR_OPERATION_ABORTED
+    public void Device_gone_mid_read_is_asleep(int win32Error)
+    {
+        var (vendor, _) = AddDongle();
+        vendor.ReadError = new HidIoException("ReadFile failed", win32Error);
+        var backend = new TrackingHidBackend(_fake);
+
+        var reading = Assert.Single(Poll(Provider(backend)));
+
+        Assert.Equal(DeviceStatus.Asleep, reading.Status);
+        Assert.Empty(reading.Components);
+        Assert.Equal("Controller asleep or disconnected", reading.Detail);
+        Assert.Equal(0, backend.OpenConnections);
+    }
+
+    [Fact]
+    public void Device_gone_on_write_is_asleep()
+    {
+        var (vendor, _) = AddDongle();
+        vendor.WriteError = new HidIoException("WriteFile failed", 1167);
+
+        Assert.Equal(DeviceStatus.Asleep, Assert.Single(Poll(Provider())).Status);
+    }
+
+    [Fact]
+    public void Removed_between_enumeration_and_open_is_asleep()
+    {
+        var (vendor, _) = AddDongle();
+        vendor.OpenError = new HidIoException("Cannot open", 2); // ERROR_FILE_NOT_FOUND
+
+        var reading = Assert.Single(Poll(Provider()));
+
+        Assert.Equal(DeviceStatus.Asleep, reading.Status);
+        Assert.Equal("Controller asleep or disconnected", reading.Detail);
+    }
+
+    [Fact]
+    public void Access_denied_on_open_needs_access()
+    {
+        var (vendor, _) = AddDongle();
+        vendor.OpenError = new HidIoException("Cannot open", HidIoException.AccessDenied);
+
+        var reading = Assert.Single(Poll(Provider()));
+
+        Assert.Equal(DeviceStatus.NeedsAccess, reading.Status);
+        Assert.Equal("Windows denied access to the controller", reading.Detail);
+        Assert.Empty(vendor.Written);
+    }
+
+    [Fact]
+    public void Other_HID_failures_are_errors()
+    {
+        var (vendor, _) = AddDongle();
+        vendor.ReadError = new HidIoException("ReadFile failed", 1784);
+
+        var reading = Assert.Single(Poll(Provider()));
+
+        Assert.Equal(DeviceStatus.Error, reading.Status);
+        Assert.Equal("Could not read the controller (error 1784)", reading.Detail);
+    }
+
+    [Fact]
+    public void A_refused_command_is_an_internal_error_and_is_logged()
+    {
+        // The collection turns into the 20DD identity after the first request: the policy refuses the retry.
+        var (vendor, _) = AddDongle();
+        vendor.OnWrite = _ => vendor.Info = vendor.Info with { VendorId = 0x20DD };
+        var lines = new List<string>();
+        void Collect(string line)
+        {
+            lock (lines) lines.Add(line);
+        }
+        Log.LineWritten += Collect;
+        try
+        {
+            var reading = Assert.Single(Poll(Provider()));
+
+            Assert.Equal(DeviceStatus.Error, reading.Status);
+            Assert.Equal("Internal error: unsafe command refused", reading.Detail);
+            Assert.Single(vendor.Written);
+        }
+        finally
+        {
+            Log.LineWritten -= Collect;
+        }
+        lock (lines) Assert.Contains(lines, l => l.Contains(" ERROR ") && l.Contains("Betop"));
+    }
+
+    [Fact]
+    public void One_failing_model_does_not_stop_the_others()
+    {
+        var (kp70c2, _) = AddDongle();
+        kp70c2.OpenError = new HidIoException("Cannot open", 1167);
+        var kp50c = _fake.Add(0x20BC, 0x514A, 0x00FF, 0x0003, 64, 64, mi: 1);
+        ReplyWith(kp50c, Reply91);
+
+        var readings = Poll(Provider());
+
+        Assert.Equal(DeviceStatus.Online, readings.Single(r => r.DeviceId == "betop:KP50C").Status);
+        Assert.Equal(DeviceStatus.Asleep, readings.Single(r => r.DeviceId == "betop:KP70C2").Status);
     }
 
     [Fact]
