@@ -41,6 +41,7 @@ internal sealed class TrayIconHost : IDisposable
         UpdateIcon();
         _icon.Visible = true;
         SystemEvents.UserPreferenceChanged += OnUserPreferenceChanged;
+        SystemEvents.DisplaySettingsChanged += OnDisplaySettingsChanged;
     }
 
     public event EventHandler? LeftClicked;
@@ -67,6 +68,7 @@ internal sealed class TrayIconHost : IDisposable
     public void Dispose()
     {
         SystemEvents.UserPreferenceChanged -= OnUserPreferenceChanged;
+        SystemEvents.DisplaySettingsChanged -= OnDisplaySettingsChanged;
         _icon.Visible = false;
         _icon.Dispose();
         _menu.Dispose();
@@ -83,6 +85,9 @@ internal sealed class TrayIconHost : IDisposable
     // The taskbar theme or the DPI may have changed: redraw the glyph if needed.
     private void OnUserPreferenceChanged(object sender, UserPreferenceChangedEventArgs e) =>
         _dispatcher.BeginInvoke(UpdateIcon);
+
+    // A display scale or monitor change (WM_DISPLAYCHANGE) may move the taskbar to another DPI.
+    private void OnDisplaySettingsChanged(object? sender, EventArgs e) => _dispatcher.BeginInvoke(UpdateIcon);
 
     // Drawn at the exact size the shell shows, so it never resamples the glyph's whole-pixel strokes.
     private void UpdateIcon()
