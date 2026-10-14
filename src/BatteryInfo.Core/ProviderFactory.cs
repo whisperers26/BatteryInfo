@@ -1,6 +1,7 @@
 using BatteryInfo.Core.Diagnostics;
 using BatteryInfo.Core.Monitoring;
 using BatteryInfo.Core.Vendors.Logitech;
+using BatteryInfo.Core.Vendors.Rog;
 
 namespace BatteryInfo.Core;
 
@@ -10,6 +11,7 @@ public static class ProviderFactory
     private static readonly Func<IBatteryProvider>[] Factories =
     [
         () => new LogitechBatteryProvider(),
+        () => new RogBatteryProvider(),
     ];
 
     public static IReadOnlyList<IBatteryProvider> CreateAll() => Create(Factories);
