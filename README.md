@@ -39,8 +39,9 @@ of that build first. A local build does not update itself.
 
 - Click the battery icon in the tray for the flyout; right-click it for Refresh, Start with Windows and Exit.
   Hovering shows every device's level in the tooltip.
-- Each row shows the level and whether the device is charging, asleep (with its last known level) or
-  not connected. Earbuds show left, right and case. Click a row for its last 7 days.
+- Only connected devices are listed: one that is asleep, switched off or unplugged disappears until it connects
+  again (a device Windows will not let the app read stays, with the reason). Each row shows the level and
+  whether the device is charging. Earbuds show left, right and case. Click a row for its last 7 days.
 - A level marked ≈ is approximate. "Estimated" means the device reports only a voltage or a coarse level.
   "Approx. from Windows" means the HUAWEI earbuds' own battery channel could not be read (for example another
   app holds it), so Windows' value is shown, which can be about 5 points high; their 7-day chart shows only
