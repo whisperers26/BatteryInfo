@@ -305,6 +305,18 @@ public class BetopBatteryProviderTests
     }
 
     [Fact]
+    public void Write_timeout_is_no_answer()
+    {
+        var (vendor, _) = AddDongle();
+        vendor.WriteError = new HidIoException("WriteFile timed out", 1460); // ERROR_TIMEOUT from the 1 s write guard
+
+        var reading = Assert.Single(Poll(Provider()));
+
+        Assert.Equal(DeviceStatus.Asleep, reading.Status);
+        Assert.Equal("No answer from the controller", reading.Detail);
+    }
+
+    [Fact]
     public void Removed_between_enumeration_and_open_is_asleep()
     {
         var (vendor, _) = AddDongle();

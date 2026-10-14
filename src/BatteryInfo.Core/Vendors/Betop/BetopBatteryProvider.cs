@@ -13,6 +13,8 @@ public sealed class BetopBatteryProvider : IBatteryProvider
     private const string SourceName = "Betop 0x15";
     private const int Attempts = 3; // one request and up to two retries
     private const int ErrorFileNotFound = 2; // CreateFile on a path removed since enumeration
+    private const int ErrorTimeout = 1460; // WindowsHidConnection.Write's 1 s guard expired
+    private const string NoAnswer = "No answer from the controller";
     private static readonly TimeSpan ReplyTimeout = TimeSpan.FromMilliseconds(500);
 
     private readonly IHidBackend _hid;
@@ -138,6 +140,12 @@ public sealed class BetopBatteryProvider : IBatteryProvider
             Log.Info($"Betop {model.Name} went away: {e.Message}");
             return Reading(model, DeviceStatus.Asleep, [], "Controller asleep or disconnected");
         }
+        catch (HidIoException e) when (e.Win32Error == ErrorTimeout)
+        {
+            // The dongle stopped taking output reports: its link is in transition, like an unanswered request.
+            Log.Info($"Betop {model.Name}: {e.Message}");
+            return Reading(model, DeviceStatus.Asleep, [], NoAnswer);
+        }
         catch (HidIoException e)
         {
             Log.Warn($"Betop {model.Name}: {e.Message}");
@@ -166,7 +174,7 @@ public sealed class BetopBatteryProvider : IBatteryProvider
             if (AwaitBatteryReply(connection, model) is { } status)
                 return Reading(model, DeviceStatus.Online, [BatteryComponent.Single(status.Percent, status.Charge)]);
         }
-        return Reading(model, DeviceStatus.Asleep, [], "No answer from the controller");
+        return Reading(model, DeviceStatus.Asleep, [], NoAnswer);
     }
 
     // Skips every other frame on the handle: BetopGame's 0x25/0x11/0x21 replies, unsolicited 0x55 link changes.
