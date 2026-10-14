@@ -656,6 +656,25 @@ public class RazerBatteryProviderTests
     }
 
     [Fact]
+    public void Default_wait_wakes_up_when_cancelled()
+    {
+        var provider = new RazerBatteryProvider(_backend, _time);
+        using var cts = new CancellationTokenSource();
+        var canceller = new Thread(() =>
+        {
+            Thread.Sleep(50);
+            cts.Cancel();
+        });
+        var clock = System.Diagnostics.Stopwatch.StartNew();
+
+        canceller.Start();
+        provider.Wait(TimeSpan.FromSeconds(10), cts.Token);
+
+        Assert.True(clock.Elapsed < TimeSpan.FromSeconds(5), $"waited {clock.Elapsed.TotalMilliseconds} ms");
+        canceller.Join();
+    }
+
+    [Fact]
     public async Task Concurrent_polls_are_serialized()
     {
         Wired();
