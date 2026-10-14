@@ -50,8 +50,10 @@ of that build first. A local build does not update itself.
   app holds it), so Windows' value is shown, which can be about 5 points high; their 7-day chart shows only
   the left, right and case values, so it has a gap for that time.
 - The gear button next to refresh opens the settings; they fold away again whenever the flyout closes. They set
-  the low-battery alert level (10-30 %) and turn the alerts on or off. An alert fires once
-  per discharge, when a device that is not charging reaches the level.
+  the low-battery alert level (10-30 %) and turn the alerts on or off. An alert fires once per discharge, when a
+  device that is not charging reaches the level. **Show first device's level in tray** fills the tray battery to
+  the level of the first device in the list that has a live value (with a bolt while it charges); off (the
+  default), the tray battery is always full.
 - Settings, history (kept 90 days), logs and the low-battery alerts already shown are in
   `%LOCALAPPDATA%\BatteryInfo`. The alerts are kept so that restarting the app does not repeat them.
 - Updates come from this repository's releases. With **Update automatically** on (the default), the app
