@@ -101,7 +101,9 @@ public sealed class BatteryMonitor : IAsyncDisposable
     {
         try
         {
-            await current.ConfigureAwait(false);
+            // Always yield. If the poll ended just after RefreshAsync checked it, continuing inline would clear
+            // _next before RefreshAsync stores this task in it, leaving a finished task queued for good.
+            await current.ConfigureAwait(ConfigureAwaitOptions.ForceYielding);
         }
         catch (Exception e)
         {

@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using BatteryInfo.Core.Model;
 using BatteryInfo.Core.Monitoring;
 using BatteryInfo.Core.Tests.Fakes;
@@ -8,6 +9,7 @@ public sealed class BatteryMonitorTests : IAsyncDisposable
 {
     private static readonly TimeSpan Interval = TimeSpan.FromSeconds(120);
     private static readonly TimeSpan WaitLimit = TimeSpan.FromSeconds(5);
+    private static readonly TimeSpan RaceBudget = TimeSpan.FromSeconds(1);
 
     private readonly ManualTimeProvider _time = new();
     private readonly DeviceStore _store;
@@ -209,6 +211,53 @@ public sealed class BatteryMonitorTests : IAsyncDisposable
 
         Assert.Same(second, third);
         Assert.Equal(2, provider.Polls);
+    }
+
+    [Fact]
+    public async Task Refresh_landing_as_a_poll_ends_does_not_stop_later_refreshes_from_queueing()
+    {
+        TaskCompletionSource? gate = null;
+        var blocked = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var provider = new FakeProvider("ROG", async _ =>
+        {
+            if (Volatile.Read(ref gate) is { } g)
+            {
+                blocked.TrySetResult();
+                await g.Task;
+            }
+            return [];
+        });
+        var monitor = Monitor(TimeProvider.System, providers: provider);
+
+        // The second refresh of each round lands while the first poll runs or just as it ends. A refresh that
+        // lands as the poll ends must not leave a finished task queued: one handed out again means it did.
+        var handedOut = new HashSet<Task>(ReferenceEqualityComparer.Instance);
+        var random = new Random(1);
+        var budget = Stopwatch.StartNew();
+        var rounds = 0;
+        var reused = false;
+        while (!reused && budget.Elapsed < RaceBudget)
+        {
+            rounds++;
+            var first = monitor.RefreshAsync();
+            Thread.SpinWait(random.Next(4000));
+            var second = monitor.RefreshAsync();
+            reused = !handedOut.Add(first) | !handedOut.Add(second);
+            await Task.WhenAll(first, second).WaitAsync(WaitLimit);
+        }
+
+        // A refresh during a running poll must still queue one more poll.
+        Volatile.Write(ref gate, new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously));
+        var before = provider.Polls;
+        var running = monitor.RefreshAsync();
+        await blocked.Task.WaitAsync(WaitLimit);
+        var queued = monitor.RefreshAsync();
+        Assert.False(queued.IsCompleted, $"The refresh was dropped after {rounds} rounds.");
+        var release = gate;
+        Volatile.Write(ref gate, null);
+        release.SetResult();
+        await Task.WhenAll(running, queued).WaitAsync(WaitLimit);
+        Assert.Equal(before + 2, provider.Polls);
     }
 
     [Fact]
