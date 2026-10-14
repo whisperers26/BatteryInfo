@@ -1,4 +1,5 @@
 using System.Globalization;
+using BatteryInfo.Core.Bluetooth;
 using BatteryInfo.Core.Hid;
 
 namespace BatteryInfo.Cli;
@@ -9,6 +10,7 @@ internal static class Program
         usage: batteryinfo <command> [options]
 
           hid [--vid XXXX]      list HID collections (ids, usages, report lengths, report ids, access)
+          bt-battery <address>  Windows' own battery value for a Bluetooth address (12 hex digits)
         """;
 
     private static int Main(string[] args)
@@ -19,6 +21,8 @@ internal static class Program
         {
             case "hid":
                 return ListHid(options);
+            case "bt-battery" when options.Length == 1:
+                return BluetoothBattery(options[0]);
             default:
                 Console.Error.WriteLine(Usage);
                 return command is null or "-h" or "--help" ? 0 : 2;
@@ -40,6 +44,13 @@ internal static class Program
         }
         Console.WriteLine($"{devices.Count} collection(s)");
         return 0;
+    }
+
+    private static int BluetoothBattery(string address)
+    {
+        var value = BluetoothBatteryProperty.Read(ulong.Parse(address.Replace(":", ""), NumberStyles.HexNumber, CultureInfo.InvariantCulture));
+        Console.WriteLine(value is null ? "no battery value" : $"{value} %");
+        return value is null ? 1 : 0;
     }
 
     private static string Hex(byte? value) => value is { } v ? v.ToString("X2", CultureInfo.InvariantCulture) : "--";
