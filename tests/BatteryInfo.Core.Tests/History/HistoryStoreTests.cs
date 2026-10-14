@@ -189,6 +189,35 @@ public sealed class HistoryStoreTests : IDisposable
     }
 
     [Fact]
+    public void Append_after_a_line_cut_off_by_a_crash_starts_a_fresh_line()
+    {
+        var store = NewStore();
+        store.Append([Mouse(56)]);
+        _time.Advance(TimeSpan.FromMinutes(2));
+        var file = Path.Combine(_directory, "2026-10.jsonl");
+        File.AppendAllText(file, "{\"time\":\"2026-10-14T12:01:00+00:00\",\"deviceId\":\"logitech:B465"); // no newline
+
+        store.Append([Mouse(55)]);
+
+        Assert.Equal([56, 55], NewStore().Query("logitech:B4655832", DateTimeOffset.MinValue).Select(r => r.Percent!.Value));
+    }
+
+    [Fact]
+    public void LastKnownReadings_skips_lines_without_a_device_id()
+    {
+        var store = NewStore();
+        store.Append([Mouse(56)]);
+        var file = Path.Combine(_directory, "2026-10.jsonl");
+        File.AppendAllText(file, "{}\nnull\n{\"deviceId\":\"\",\"percent\":40}\nnot json at all\n{\"time\":\"2026-10-14T12:01:00+00:00\",\"deviceId\":\"logitech:B465");
+
+        var readings = NewStore().LastKnownReadings();
+
+        var reading = Assert.Single(readings);
+        Assert.Equal("logitech:B4655832", reading.DeviceId);
+        Assert.Equal(56, Assert.Single(reading.Components).Percent);
+    }
+
+    [Fact]
     public void Query_returns_nothing_when_the_directory_does_not_exist()
     {
         Assert.Empty(NewStore().Query("logitech:B4655832", DateTimeOffset.MinValue));
