@@ -663,6 +663,53 @@ public class LogitechBatteryProviderTests
         Assert.Equal(DeviceStatus.Asleep, reading.Status);
     }
 
+    // HID++ 1.0 devices (ping answered with INVALID_SUB_ID)
+
+    private FakeHidppDevice PairHidpp10() =>
+        _receiver.Pair(1, new FakeHidppDevice { Link = FakeLink.Hidpp10, Wpid = 0x1025, Codename = "M705" });
+
+    [Fact]
+    public async Task Hidpp10_device_reads_battery_register_0x0D()
+    {
+        PairHidpp10();
+
+        var reading = await PollSingle();
+
+        Assert.Equal("logitech:B4655832", reading.DeviceId);
+        Assert.Equal("M705", reading.Name);
+        Assert.Equal(DeviceKind.Mouse, reading.Kind);
+        Assert.Equal(DeviceStatus.Online, reading.Status);
+        Assert.Equal([BatteryComponent.Single(75, ChargeState.Discharging)], reading.Components);
+        Assert.Equal("HID++ 1.0 0x0D", reading.Source);
+        Assert.False(reading.Approximate);
+        Assert.DoesNotContain(_receiver.Requests, f => f[1] == 0x01 && f[2] == 0x00 && f[3] >> 4 == 0);
+    }
+
+    [Fact]
+    public async Task Hidpp10_device_without_register_0x0D_reads_register_0x07()
+    {
+        PairHidpp10().Register0D = null;
+
+        var reading = await PollSingle();
+
+        Assert.Equal("HID++ 1.0 0x07", reading.Source);
+        Assert.Equal([BatteryComponent.Single(50, ChargeState.Discharging)], reading.Components);
+        Assert.True(reading.Approximate);
+    }
+
+    [Fact]
+    public async Task Hidpp10_device_without_battery_registers_is_online_with_no_value()
+    {
+        var device = PairHidpp10();
+        device.Register0D = null;
+        device.Register07 = null;
+
+        var reading = await PollSingle();
+
+        Assert.Equal(DeviceStatus.Online, reading.Status);
+        Assert.Empty(reading.Components);
+    }
+
     [Fact]
     public async Task Other_vendors_devices_are_never_opened()
     {

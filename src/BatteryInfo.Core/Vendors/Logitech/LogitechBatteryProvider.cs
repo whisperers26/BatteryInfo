@@ -306,6 +306,8 @@ public sealed class LogitechBatteryProvider : IBatteryProvider
                 case HidppMatchKind.Hidpp10Error when ping.ErrorCode == HidppProtocol.ErrorUnknownDevice:
                     Forget(known);
                     return null;
+                case HidppMatchKind.Hidpp10Error when ping.ErrorCode == HidppProtocol.ErrorInvalidSubId:
+                    return ReadHidpp10(poll, known);
                 case HidppMatchKind.Hidpp10Error or HidppMatchKind.Hidpp20Error:
                     return Asleep(poll, known, NotResponding);
             }
@@ -341,6 +343,23 @@ public sealed class LogitechBatteryProvider : IBatteryProvider
             Log.Warn($"Logitech device {known.Index}: {e.Message}");
             return Reading(known, DeviceStatus.Error, GenericSource, detail: $"I/O error (Win32 error {e.Win32Error})");
         }
+    }
+
+    // A HID++ 1.0 device: battery register 0x0D (percent), else 0x07 (coarse level) (§7E).
+    private DeviceReading? ReadHidpp10(ChannelPoll poll, KnownDevice known)
+    {
+        EnsureCodename(poll, known);
+        var charge = poll.Channel.Send(HidppProtocol.ReadRegister(known.Index, 0x0D), _timings.Register);
+        if (charge.Kind == HidppMatchKind.Reply)
+            return Online(known, HidppProtocol.DecodeRegisterBatteryCharge(charge.Report), "HID++ 1.0 0x0D");
+
+        var status = poll.Channel.Send(HidppProtocol.ReadRegister(known.Index, 0x07), _timings.Register);
+        if (status.Kind == HidppMatchKind.Reply)
+            return Online(known, HidppProtocol.DecodeRegisterBatteryStatus(status.Report), "HID++ 1.0 0x07");
+
+        return charge.TimedOut && status.TimedOut
+            ? Asleep(poll, known, NotResponding)
+            : Reading(known, DeviceStatus.Online, "HID++ 1.0", detail: "No battery register");
     }
 
     // Features from the cache (after checking the battery index still holds the same feature) or resolved now. Error 6
