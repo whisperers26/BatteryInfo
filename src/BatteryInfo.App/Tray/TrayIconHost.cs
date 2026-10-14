@@ -11,6 +11,7 @@ internal sealed class TrayIconHost : IDisposable
 {
     private readonly NotifyIcon _icon;
     private readonly ContextMenuStrip _menu;
+    private readonly ToolStripMenuItem _startWithWindows;
     private readonly System.Windows.Threading.Dispatcher _dispatcher;
     private System.Drawing.Icon? _image;
     private bool? _lightTaskbar;
@@ -18,11 +19,17 @@ internal sealed class TrayIconHost : IDisposable
     public TrayIconHost(System.Windows.Threading.Dispatcher dispatcher)
     {
         _dispatcher = dispatcher;
-        _menu = new ContextMenuStrip { ShowImageMargin = false, ShowCheckMargin = false, Padding = new Padding(0, 4, 0, 4) };
+        _menu = new ContextMenuStrip { ShowImageMargin = false, ShowCheckMargin = true, Padding = new Padding(0, 4, 0, 4) };
         _menu.Items.Add(MenuItem("Refresh", () => RefreshClicked?.Invoke(this, EventArgs.Empty)));
+        _startWithWindows = MenuItem("Start with Windows", () => StartWithWindowsClicked?.Invoke(this, EventArgs.Empty));
+        _menu.Items.Add(_startWithWindows);
         _menu.Items.Add(new ToolStripSeparator());
         _menu.Items.Add(MenuItem("Exit", () => ExitClicked?.Invoke(this, EventArgs.Empty)));
-        _menu.Opening += (_, _) => ApplyMenuTheme();
+        _menu.Opening += (_, _) =>
+        {
+            ApplyMenuTheme();
+            _startWithWindows.Checked = IsStartWithWindows?.Invoke() ?? false;
+        };
         _menu.Opened += (_, _) => NativeMethods.SetCornerPreference(_menu.Handle, NativeMethods.DwmwcpRoundSmall);
 
         _icon = new NotifyIcon { Text = TrayTooltip.Title, ContextMenuStrip = _menu };
@@ -40,6 +47,11 @@ internal sealed class TrayIconHost : IDisposable
     public event EventHandler? RefreshClicked;
 
     public event EventHandler? ExitClicked;
+
+    public event EventHandler? StartWithWindowsClicked;
+
+    /// <summary>Asked each time the menu opens, so the check mark follows the registry.</summary>
+    public Func<bool>? IsStartWithWindows { get; set; }
 
     /// <summary>Sets the tooltip; Windows allows at most 127 characters.</summary>
     public void SetTooltip(string text) => _icon.Text = text.Length <= TrayTooltip.MaxLength ? text : text[..TrayTooltip.MaxLength];

@@ -94,6 +94,12 @@ public partial class App : Application, IFlyoutServices
         _tray.LeftClicked += (_, _) => ToggleFlyout();
         _tray.RefreshClicked += (_, _) => _ = _monitor.RefreshAsync();
         _tray.ExitClicked += (_, _) => Shutdown();
+        _tray.IsStartWithWindows = AutoStart.IsEnabled;
+        _tray.StartWithWindowsClicked += (_, _) =>
+        {
+            AutoStart.SetEnabled(!AutoStart.IsEnabled());
+            _flyoutViewModel?.ReloadStartWithWindows();
+        };
         _notifier = new LowBatteryNotifier(_tray.ShowWarning)
         {
             Threshold = _settings.LowBatteryThreshold,
@@ -208,11 +214,9 @@ public partial class App : Application, IFlyoutServices
         return HistorySeries.Build(_history.Query(deviceId, since), maxGap);
     }
 
-    bool IFlyoutServices.IsStartWithWindowsEnabled() => false;
+    bool IFlyoutServices.IsStartWithWindowsEnabled() => AutoStart.IsEnabled();
 
-    void IFlyoutServices.SetStartWithWindows(bool enabled)
-    {
-    }
+    void IFlyoutServices.SetStartWithWindows(bool enabled) => AutoStart.SetEnabled(enabled);
 
     void IFlyoutServices.SetLowBatteryThreshold(int percent)
     {

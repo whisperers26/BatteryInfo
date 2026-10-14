@@ -287,6 +287,15 @@
                     <CheckBox Grid.Column="1" Style="{StaticResource ToggleSwitchStyle}" VerticalAlignment="Center"
                               IsChecked="{Binding NotificationsEnabled}" AutomationProperties.Name="Low-battery notifications" />
                 </Grid>
+                <Grid MinHeight="36" Margin="0,0,6,0">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="Auto" />
+                    </Grid.ColumnDefinitions>
+                    <TextBlock Text="Start with Windows" Style="{StaticResource SettingLabelStyle}" />
+                    <CheckBox Grid.Column="1" Style="{StaticResource ToggleSwitchStyle}" VerticalAlignment="Center"
+                              IsChecked="{Binding StartWithWindows}" AutomationProperties.Name="Start with Windows" />
+                </Grid>
             </StackPanel>
         </Border>
     </Grid>
