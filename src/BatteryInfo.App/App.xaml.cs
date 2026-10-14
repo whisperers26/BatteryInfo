@@ -130,12 +130,14 @@ public partial class App : Application, IFlyoutServices
 
     protected override void OnExit(ExitEventArgs e)
     {
+        // Stop the inputs first, so no late snapshot reaches a disposed tray icon.
         SystemEvents.PowerModeChanged -= OnPowerModeChanged;
+        if (_monitor is not null) _monitor.SnapshotChanged -= OnSnapshotChanged;
         _flyout?.CloseForExit();
         _tray?.Dispose();
+        _tray = null;
         if (_monitor is { } monitor)
         {
-            monitor.SnapshotChanged -= OnSnapshotChanged;
             try
             {
                 // Off the UI thread: the monitor's awaits must not need this dispatcher while it is blocked here.
