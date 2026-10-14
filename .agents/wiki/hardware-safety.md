@@ -12,6 +12,7 @@ What may be sent to the owner's devices, and how to check a provider against the
 | HUAWEI FreeClip 2 | classic Bluetooth, SPP RFCOMM channel 1 | C0:DA:5E:A8:3E:C7 | yes |
 | Betop KP70C2 | 2.4 GHz dongle | 20BC:518D pad on; 20DD:518D pad asleep | yes |
 | Razer Basilisk V3 Pro 35K | HyperSpeed dongle / cable | 1532:00D7 / 1532:00D6 | no (dongle usually unplugged) |
+| SteelSeries Arctis Nova 5X | 2.4 GHz base station | 1038:2253 MI_03 (UP FFC0) | yes |
 
 ## Allowed commands
 
@@ -24,6 +25,7 @@ Everything not in this table is refused by the vendor's `ICommandPolicy` before 
 | Betop | `02 15`, `02 55`, `02 18` with zero payload, only on VID 0x20BC |
 | Razer | `07/80`, `07/84` (size 2, arg0 0); `00/BF` (size 0x50) on 00D7 only |
 | HUAWEI | the `01 08` battery request only |
+| SteelSeries | `00 B0` with zero payload, only on the 1038:2232/2253 UP FFC0 collection |
 
 ## Never
 
