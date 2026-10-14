@@ -43,9 +43,10 @@ public sealed class LowBatteryPolicy
 
                 alerted.Add(component.Name);
 
-                // The other way round: when the batteries are read again after the whole-device value alerted, the ones
-                // at or below the threshold take over that alert without raising another.
-                if (!IsWholeDevice(component) && alerted.Contains(WholeDevice)) continue;
+                // The other way round: when the batteries are read again after the whole-device value alerted, the
+                // earbuds at or below the threshold take over that alert without raising another. The case alerts on
+                // its own, as the whole-device value never stood for it.
+                if (IsEarbud(component.Name) && alerted.Contains(WholeDevice)) continue;
 
                 alerts.Add(new LowBatteryAlert(reading.DeviceId, reading.Name, component.Name, percent));
             }

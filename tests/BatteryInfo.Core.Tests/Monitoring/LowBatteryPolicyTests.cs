@@ -180,6 +180,17 @@ public class LowBatteryPolicyTests
     }
 
     [Fact]
+    public void Case_does_not_take_over_the_hfp_alert()
+    {
+        Assert.Single(_policy.Evaluate([EarbudsOverHfp(20)]));
+
+        var alert = Assert.Single(_policy.Evaluate([Earbuds(left: 60, right: 60, @case: 19)]));
+        Assert.Equal("Case", alert.Component);
+        Assert.Equal(19, alert.Percent);
+        Assert.Empty(_policy.Evaluate([Earbuds(left: 60, right: 60, @case: 17)]));
+    }
+
+    [Fact]
     public void Threshold_change_applies_to_next_evaluation()
     {
         _policy.Threshold = 30;
