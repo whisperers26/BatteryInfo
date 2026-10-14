@@ -88,7 +88,6 @@ public partial class App : Application, IFlyoutServices
         if (_settings.TraceFrames) Log.Configure(logs, traceFrames: true);
         Log.Info($"BatteryInfo starting (args: {string.Join(' ', args)}; per-monitor DPI set: {DpiAwarenessSet})");
         HookUnhandledExceptions();
-        if (!_options.Demo) Task.Run(ShortcutIcons.Repair);
 
         var historyDirectory = Path.Combine(root, "history");
         if (_options.Demo) DemoHistory.Reset(historyDirectory);
