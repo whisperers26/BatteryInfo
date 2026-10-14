@@ -1,0 +1,387 @@
+using BatteryInfo.Core.Hid;
+using BatteryInfo.Core.Model;
+using BatteryInfo.Core.Tests.Fakes;
+using BatteryInfo.Core.Vendors.Logitech;
+
+namespace BatteryInfo.Core.Tests.Vendors.Logitech;
+
+public class LogitechBatteryProviderTests
+{
+    private static readonly HidppTimings FastTimings = new(
+        Register: TimeSpan.FromMilliseconds(40),
+        Ping: TimeSpan.FromMilliseconds(40),
+        Feature: TimeSpan.FromMilliseconds(40),
+        Slice: TimeSpan.FromMilliseconds(1),
+        BusyRetryDelay: TimeSpan.FromMilliseconds(1));
+
+    private readonly FakeHidBackend _backend = new();
+    private readonly ManualTimeProvider _time = new();
+    private readonly FakeHidppReceiver _receiver;
+    private readonly LogitechBatteryProvider _provider;
+
+    public LogitechBatteryProviderTests()
+    {
+        _receiver = new FakeHidppReceiver(_backend);
+        _provider = new LogitechBatteryProvider(_backend, _time, FastTimings);
+    }
+
+    private async Task<DeviceReading> PollSingle()
+    {
+        var readings = await _provider.PollAsync(CancellationToken.None);
+        return Assert.Single(readings);
+    }
+
+    private static byte[] Long(string hex)
+    {
+        var report = new byte[20];
+        Convert.FromHexString(hex.Replace(" ", "")).CopyTo(report, 0);
+        return report;
+    }
+
+    [Fact]
+    public async Task Online_mouse_in_slot_1_reads_the_unified_battery()
+    {
+        _receiver.Pair(1);
+
+        var reading = await PollSingle();
+
+        Assert.Equal("logitech:B4655832", reading.DeviceId);
+        Assert.Equal("Logitech", reading.Vendor);
+        Assert.Equal("PRO X2 SUPERSTRIKE", reading.Name);
+        Assert.Equal(DeviceKind.Mouse, reading.Kind);
+        Assert.Equal(DeviceStatus.Online, reading.Status);
+        Assert.Equal([BatteryComponent.Single(56, ChargeState.Discharging)], reading.Components);
+        Assert.Equal(_time.GetUtcNow(), reading.Timestamp);
+        Assert.Equal("HID++ 0x1004", reading.Source);
+        Assert.False(reading.Approximate);
+        Assert.Null(reading.Detail);
+    }
+
+    [Fact]
+    public async Task Every_request_is_a_short_frame_on_the_short_collection_with_software_id_0x0C()
+    {
+        _receiver.Pair(1);
+
+        await PollSingle();
+
+        Assert.Empty(_receiver.Long.Written);
+        Assert.All(_receiver.Requests, frame => Assert.Equal(7, frame.Length));
+        Assert.All(_receiver.Requests.Where(f => f[2] < 0x80), frame => Assert.Equal(0x0C, frame[3] & 0x0F));
+    }
+
+    [Fact]
+    public async Task Collections_are_opened_shared_read_write_and_closed_after_the_poll()
+    {
+        _receiver.Pair(1);
+
+        await PollSingle();
+
+        Assert.Equal([HidAccess.ReadWrite], _receiver.Short.Opens);
+        Assert.Equal([HidAccess.ReadWrite], _receiver.Long.Opens);
+    }
+
+    [Fact]
+    public async Task Empty_slot_is_skipped_without_a_ping()
+    {
+        _receiver.Pair(1);
+
+        await PollSingle();
+
+        Assert.DoesNotContain(_receiver.Requests, f => f[1] == 0x02);
+    }
+
+    [Fact]
+    public async Task Max_devices_outside_1_to_6_scans_all_six_slots()
+    {
+        _receiver.MaxDevices = 0;
+        _receiver.Pair(5);
+
+        var reading = await PollSingle();
+
+        Assert.Equal(DeviceStatus.Online, reading.Status);
+        Assert.Contains(_receiver.Requests, f => f[2] == 0x83 && f[4] == 0x25);
+    }
+
+    [Fact]
+    public async Task Asleep_mouse_is_reported_asleep_with_its_identity_from_the_receiver()
+    {
+        _receiver.Pair(1).Link = FakeLink.Asleep;
+
+        var reading = await PollSingle();
+
+        Assert.Equal("logitech:B4655832", reading.DeviceId);
+        Assert.Equal("PRO X2 SUPERSTRIKE", reading.Name);
+        Assert.Equal(DeviceKind.Mouse, reading.Kind);
+        Assert.Equal(DeviceStatus.Asleep, reading.Status);
+        Assert.Empty(reading.Components);
+        Assert.NotNull(reading.Detail);
+    }
+
+    [Fact]
+    public async Task Asleep_device_of_an_unknown_model_is_named_by_its_codename()
+    {
+        var device = _receiver.Pair(1);
+        device.Link = FakeLink.Asleep;
+        device.Wpid = 0x4099;
+        device.Codename = "G502 X";
+
+        var reading = await PollSingle();
+
+        Assert.Equal("G502 X", reading.Name);
+        Assert.Equal(DeviceKind.Mouse, reading.Kind);
+    }
+
+    [Fact]
+    public async Task Ping_timeout_means_asleep()
+    {
+        _receiver.Pair(1).Link = FakeLink.Silent;
+
+        Assert.Equal(DeviceStatus.Asleep, (await PollSingle()).Status);
+    }
+
+    [Fact]
+    public async Task Device_that_stops_answering_after_the_ping_is_asleep()
+    {
+        _receiver.Pair(1).SilentAfterPing = true;
+
+        var reading = await PollSingle();
+
+        Assert.Equal(DeviceStatus.Asleep, reading.Status);
+        Assert.Equal("logitech:B4655832", reading.DeviceId);
+    }
+
+    [Fact]
+    public async Task Ping_is_iroot_fn1_with_a_nonzero_marker()
+    {
+        _receiver.Pair(1).Link = FakeLink.Asleep;
+
+        await PollSingle();
+
+        var ping = _receiver.Requests.Single(f => f[1] == 0x01 && f[2] == 0x00 && f[3] == 0x1C);
+        Assert.Equal(0, ping[4]);
+        Assert.NotEqual(0, ping[6]);
+    }
+
+    [Fact]
+    public async Task Foreign_replies_events_and_notifications_are_ignored()
+    {
+        _receiver.Pair(1);
+        _receiver.Noise = frame =>
+        [
+            // G HUB (swId 0x0D) asking the same thing and getting a different answer.
+            (true, [0x11, frame[1], frame[2], (byte)(frame[3] & 0xF0 | 0x0D), 0x10, 0x01, 0x02, 0x03, .. new byte[12]]),
+            // lamparray-style reply with another software id but the same marker.
+            (true, [0x11, frame[1], frame[2], (byte)(frame[3] & 0xF0 | 0x0A), frame[4], frame[5], frame[6], .. new byte[13]]),
+            // a battery event of another device.
+            (true, Long("11 02 06 00 05 08 00 00")),
+            // a receiver notification on the short collection.
+            (false, [0x10, 0x02, 0x41, 0x0C, 0x42, 0x99, 0x40]),
+        ];
+
+        var reading = await PollSingle();
+
+        Assert.Equal(DeviceStatus.Online, reading.Status);
+        Assert.Equal(56, reading.Components[0].Percent);
+        Assert.Equal("PRO X2 SUPERSTRIKE", reading.Name);
+    }
+
+    [Fact]
+    public async Task Receiver_unplugged_before_the_first_read_ends_the_poll_quietly()
+    {
+        _receiver.Pair(1);
+        _receiver.Long.ReadError = new HidIoException("ReadFile", 1167);
+
+        var readings = await _provider.PollAsync(CancellationToken.None);
+
+        Assert.Empty(readings);
+    }
+
+    [Fact]
+    public async Task Receiver_unplugged_mid_read_reports_the_device_asleep_without_throwing()
+    {
+        _receiver.Pair(1);
+        _receiver.Pair(2, new FakeHidppDevice { UnitId = 0x11223344 });
+        _receiver.Noise = frame =>
+        {
+            if (frame[1] == 0x01 && frame[2] == 0x00 && frame[3] >> 4 == 1)
+                _receiver.Long.ReadError = new HidIoException("ReadFile", 1167);
+            return [];
+        };
+
+        var reading = await PollSingle();
+
+        Assert.Equal(DeviceStatus.Asleep, reading.Status);
+        Assert.Equal("logitech:B4655832", reading.DeviceId);
+        Assert.DoesNotContain(_receiver.Requests, f => f[1] == 0x02 || f[2] == 0x83 && f[4] == 0x21);
+    }
+
+    [Fact]
+    public async Task Access_denied_reports_the_receiver_as_needing_access()
+    {
+        _receiver.Pair(1);
+        _receiver.Short.OpenError = new HidIoException("CreateFile", 5);
+
+        var reading = await PollSingle();
+
+        Assert.Equal(DeviceStatus.NeedsAccess, reading.Status);
+        Assert.Equal("logitech:usb-C54D", reading.DeviceId);
+        Assert.NotNull(reading.Detail);
+        Assert.Empty(_receiver.Requests);
+    }
+
+    [Fact]
+    public async Task Long_collection_access_denied_reports_needs_access()
+    {
+        _receiver.Pair(1);
+        _receiver.Long.OpenError = new HidIoException("CreateFile", 5);
+
+        var reading = await PollSingle();
+
+        Assert.Equal(DeviceStatus.NeedsAccess, reading.Status);
+    }
+
+    [Fact]
+    public async Task Receiver_gone_at_open_gives_no_reading()
+    {
+        _receiver.Short.OpenError = new HidIoException("CreateFile", 1167);
+
+        Assert.Empty(await _provider.PollAsync(CancellationToken.None));
+    }
+
+    [Fact]
+    public async Task Other_open_failures_are_errors()
+    {
+        _receiver.Short.OpenError = new HidIoException("CreateFile", 32);
+
+        Assert.Equal(DeviceStatus.Error, (await PollSingle()).Status);
+    }
+
+    [Fact]
+    public async Task Cancelled_poll_throws_operation_cancelled()
+    {
+        _receiver.Pair(1);
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => _provider.PollAsync(new CancellationToken(canceled: true)));
+        Assert.Empty(_receiver.Requests);
+    }
+
+    [Fact]
+    public async Task Battery_status_feature_is_used_when_unified_battery_is_absent()
+    {
+        var device = _receiver.Pair(1);
+        device.Features.Remove(0x1004);
+        device.Features[0x1000] = 0x07;
+
+        var reading = await PollSingle();
+
+        Assert.Equal("HID++ 0x1000", reading.Source);
+        Assert.Equal([BatteryComponent.Single(50, ChargeState.Discharging)], reading.Components);
+        Assert.False(reading.Approximate);
+    }
+
+    [Fact]
+    public async Task Battery_voltage_feature_is_approximate()
+    {
+        var device = _receiver.Pair(1);
+        device.Features.Remove(0x1004);
+        device.Features[0x1001] = 0x07;
+
+        var reading = await PollSingle();
+
+        Assert.Equal("HID++ 0x1001", reading.Source);
+        Assert.Equal(81, reading.Components[0].Percent);
+        Assert.True(reading.Approximate);
+    }
+
+    [Fact]
+    public async Task Adc_measurement_feature_is_read_and_inactive_means_asleep()
+    {
+        var device = _receiver.Pair(1);
+        device.Features.Remove(0x1004);
+        device.Features[0x1F20] = 0x07;
+
+        var active = await PollSingle();
+        device.AdcMeasurement = [0x0F, 0x3C, 0x00];
+        var inactive = await PollSingle();
+
+        Assert.Equal("HID++ 0x1F20", active.Source);
+        Assert.Equal(87, active.Components[0].Percent);
+        Assert.Equal(DeviceStatus.Asleep, inactive.Status);
+    }
+
+    [Fact]
+    public async Task Device_without_a_battery_feature_is_online_with_no_value()
+    {
+        _receiver.Pair(1).Features.Remove(0x1004);
+
+        var reading = await PollSingle();
+
+        Assert.Equal(DeviceStatus.Online, reading.Status);
+        Assert.Empty(reading.Components);
+        Assert.NotNull(reading.Detail);
+    }
+
+    [Fact]
+    public async Task Without_the_name_feature_the_model_table_names_the_device()
+    {
+        _receiver.Pair(1).Features.Remove(0x0005);
+
+        Assert.Equal("PRO X2 SUPERSTRIKE", (await PollSingle()).Name);
+    }
+
+    [Fact]
+    public async Task Busy_device_is_retried()
+    {
+        var device = _receiver.Pair(1);
+        device.NextErrors.Enqueue(0x08);
+        device.NextErrors.Enqueue(0x08);
+
+        var reading = await PollSingle();
+
+        Assert.Equal(56, reading.Components[0].Percent);
+    }
+
+    [Fact]
+    public async Task Hidpp20_error_on_the_battery_read_is_an_error_reading()
+    {
+        var device = _receiver.Pair(1);
+        _receiver.Noise = frame =>
+        {
+            if (frame[2] == 0x06 && frame[3] >> 4 == 1) device.NextErrors.Enqueue(0x05);
+            return [];
+        };
+
+        var reading = await PollSingle();
+
+        Assert.Equal(DeviceStatus.Error, reading.Status);
+        Assert.Equal("logitech:B4655832", reading.DeviceId);
+        Assert.Contains("05", reading.Detail);
+    }
+
+    [Fact]
+    public async Task Two_paired_devices_give_two_readings()
+    {
+        _receiver.Pair(1);
+        _receiver.Pair(2, new FakeHidppDevice { UnitId = 0x0BADF00D, Name = "G915 X", DeviceType = 0, UnifiedStatus = [0x14, 0x02, 0x01, 0x01] });
+
+        var readings = await _provider.PollAsync(CancellationToken.None);
+
+        Assert.Equal(2, readings.Count);
+        var keyboard = readings.Single(r => r.DeviceId == "logitech:0BADF00D");
+        Assert.Equal(DeviceKind.Keyboard, keyboard.Kind);
+        Assert.Equal([BatteryComponent.Single(20, ChargeState.Charging)], keyboard.Components);
+    }
+
+    [Fact]
+    public async Task Other_vendors_devices_are_never_opened()
+    {
+        var razer = _backend.Add(0x1532, 0x00D7, 0xFF00, 0x0001, 7, 7);
+        var bolt = _backend.Add(0x046D, 0xC548, 0xFF00, 0x0001, 7, 7);
+        _receiver.Pair(1);
+
+        await PollSingle();
+
+        Assert.Empty(razer.Opens);
+        Assert.Empty(bolt.Opens);
+    }
+}
