@@ -10,8 +10,12 @@ owner's hardware. Back to [AGENTS.md](../../AGENTS.md). Remove an entry once it 
   "needs access".
 - **Charging states**: not observed for Logitech, ROG, Betop or FreeClip; the mappings follow the
   vendor code and references.
-- **Asleep/off replies**: Logitech (expected `0x8F` error 0x09/0x04 or timeout) and ROG (expected
-  `FF AA` or connection type 0xFF) have not been seen with the device actually asleep.
+- **Asleep/off replies**: ROG (expected `FF AA` or connection type 0xFF) has not been seen with the
+  keyboard actually asleep. Logitech's asleep reply is seen (`0x8F` error 0x08 on a paired slot);
+  the 0x09/0x04 codes other receivers may use are not.
+- **Logitech online read through the provider**: the PRO X2 SUPERSTRIKE was asleep during every
+  provider run, so feature resolution, the name read and the 0x1004 decode have only run against the
+  fake receiver (the same frames were read live during the protocol research).
 - **Wired modes**: Logitech mouse on its cable (046D:C0A8), Azoth X on USB (0B05:1C24, report id 0),
   Betop wired pad (20BC:518C), ROG Cetra Open Wireless (0B05:1CAC).
 
