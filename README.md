@@ -15,6 +15,7 @@ and BetopGame do not need to be running. It only ever sends read commands: see
 | ROG | OMNI receivers and the keyboards/mice paired to them, e.g. Azoth X; Azoth X on USB; Cetra Open Wireless earbuds (left/right/case) | ROG vendor reports `12 01` / `12 07`, Cetra `0xCC` |
 | HUAWEI | FreeBuds/FreeClip earbuds over Bluetooth, e.g. FreeClip 2 (left/right/case) | HUAWEI serial protocol over RFCOMM; Windows' own (approximate) value as a fallback |
 | Betop (Beitong) | 2.4 GHz controllers with plain-byte dongles, e.g. KP70C2 (also KP20/KP40/KP50/KP70 variants, untested) | Betop vendor report `02 15` |
+| Razer | Basilisk V3 Pro 35K on its HyperSpeed dongle or cable (not yet tested on hardware) | Razer 90-byte feature report `07/80`, `07/84` |
 
 ## Command line
 
