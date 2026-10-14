@@ -27,6 +27,11 @@
   </ItemGroup>
 
   <ItemGroup>
+    <!-- Next to the exe as well: ShortcutIcons points the installer's shortcuts at it. -->
+    <None Include="BatteryInfo.ico" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
+  <ItemGroup>
     <ProjectReference Include="..\BatteryInfo.Core\BatteryInfo.Core.csproj" />
   </ItemGroup>
 
