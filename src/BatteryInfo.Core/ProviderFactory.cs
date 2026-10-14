@@ -5,6 +5,7 @@ using BatteryInfo.Core.Vendors.Huawei;
 using BatteryInfo.Core.Vendors.Logitech;
 using BatteryInfo.Core.Vendors.Razer;
 using BatteryInfo.Core.Vendors.Rog;
+using BatteryInfo.Core.Vendors.SteelSeries;
 
 namespace BatteryInfo.Core;
 
@@ -18,6 +19,7 @@ public static class ProviderFactory
         () => new HuaweiBatteryProvider(),
         () => new BetopBatteryProvider(),
         () => new RazerBatteryProvider(),
+        () => new SteelSeriesBatteryProvider(),
     ];
 
     public static IReadOnlyList<IBatteryProvider> CreateAll() => Create(Factories);
