@@ -39,6 +39,15 @@ public sealed class HistoryStoreTests : IDisposable
         return new DeviceState(reading, reading);
     }
 
+    // The HUAWEI provider's fallback while another app holds the SPP channel: Windows' one approximate value.
+    private DeviceState EarbudsFromWindows(int percent, DateTimeOffset? at = null)
+    {
+        var reading = new DeviceReading("huawei:C0DA5EA83EC7", "HUAWEI", "HUAWEI FreeClip 2", DeviceKind.Earbuds,
+            DeviceStatus.Online, [BatteryComponent.Single(percent, ChargeState.Unknown)], at ?? _time.GetUtcNow(),
+            "HFP (approx.)", Approximate: true);
+        return new DeviceState(reading, reading);
+    }
+
     private IReadOnlyList<HistoryRecord> AllMouse(HistoryStore store) =>
         store.Query("logitech:B4655832", DateTimeOffset.MinValue);
 
@@ -297,6 +306,39 @@ public sealed class HistoryStoreTests : IDisposable
 
         Assert.True(reading.Approximate);
         Assert.Equal(59, Assert.Single(reading.Components).Percent);
+    }
+
+    [Fact]
+    public void LastKnownReadings_of_earbuds_last_read_through_Windows_has_only_that_value()
+    {
+        var store = NewStore();
+        store.Append([Earbuds(70, 72, 50)]);
+        _time.Advance(TimeSpan.FromMinutes(2));
+        store.Append([EarbudsFromWindows(75)]);
+        var fallback = _time.GetUtcNow();
+
+        var reading = Assert.Single(NewStore().LastKnownReadings());
+
+        Assert.Equal(BatteryComponent.Single(75, ChargeState.Unknown), Assert.Single(reading.Components));
+        Assert.True(reading.Approximate);
+        Assert.Equal(fallback, reading.Timestamp);
+    }
+
+    [Fact]
+    public void LastKnownReadings_of_earbuds_read_per_bud_after_a_Windows_value_has_only_the_bud_values()
+    {
+        var store = NewStore();
+        store.Append([EarbudsFromWindows(75)]);
+        _time.Advance(TimeSpan.FromMinutes(2));
+        store.Append([Earbuds(70, 72, 50)]);
+        var perBud = _time.GetUtcNow();
+
+        var reading = Assert.Single(NewStore().LastKnownReadings());
+
+        Assert.Equal(["Left", "Right", "Case"], reading.Components.Select(c => c.Name));
+        Assert.Equal([70, 72, 50], reading.Components.Select(c => c.Percent!.Value));
+        Assert.False(reading.Approximate);
+        Assert.Equal(perBud, reading.Timestamp);
     }
 
     [Fact]

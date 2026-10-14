@@ -130,12 +130,26 @@ public sealed class HistoryStore(string directory, TimeProvider time)
 
     private static DeviceReading ToReading(IEnumerable<HistoryRecord> componentRecords)
     {
-        var records = componentRecords.OrderBy(r => ComponentOrder.Rank(r.Component)).ThenBy(r => r.Component).ToList();
+        var records = NewestSet(componentRecords.ToList())
+            .OrderBy(r => ComponentOrder.Rank(r.Component)).ThenBy(r => r.Component).ToList();
         var newest = records.MaxBy(r => r.Time)!;
         return new DeviceReading(newest.DeviceId, newest.Vendor, newest.DeviceName, newest.Kind, DeviceStatus.Offline,
             records.Select(r => new BatteryComponent(r.Component, r.Percent, r.Charge)).ToList(), newest.Time, "History",
             newest.Approximate);
     }
+
+    // A device can have both a single value and named ones in its history: HUAWEI earbuds are read per bud over SPP,
+    // and fall back to Windows' one value while another app holds SPP. Only the set written last describes the
+    // device; named values win a tie.
+    private static IReadOnlyList<HistoryRecord> NewestSet(IReadOnlyList<HistoryRecord> componentRecords)
+    {
+        var single = componentRecords.Where(r => IsSingle(r.Component)).ToList();
+        var named = componentRecords.Where(r => !IsSingle(r.Component)).ToList();
+        if (single.Count == 0 || named.Count == 0) return componentRecords;
+        return single.Max(r => r.Time) > named.Max(r => r.Time) ? single : named;
+    }
+
+    private static bool IsSingle(string component) => component.Length == 0;
 
     private void Write(List<HistoryRecord> records)
     {
