@@ -28,6 +28,9 @@ powershell -File scripts/publish.ps1 -Start
 This publishes the app to `%LOCALAPPDATA%\Programs\BatteryInfo` and starts it in the tray. Turn on
 **Start with Windows** in the flyout (or the tray menu) to launch it at sign-in.
 
+Run the same command to update. It first asks the running copy to close, so its tray icon goes away
+instead of staying behind next to the new one; a copy that does not close within 10 seconds is killed.
+
 ## Using the tray app
 
 - Click the battery icon in the tray for the flyout; right-click it for Refresh, Start with Windows and Exit.
