@@ -25,4 +25,6 @@ owner's hardware. Back to [AGENTS.md](../../AGENTS.md). Remove an entry once it 
 - Does polling every 2 minutes delay the Azoth X's idle sleep? The interval is a setting.
 - FreeClip: the SPP channel is exclusive per PC; while another app holds it, the HFP value is shown,
   which can overstate by about 5 points. Whether TLV 1 is min(L, R) or the right bud is unknown.
+- FreeClip charging flags (TLV 3) have never been non-zero live, and only the FreeClip 2 is tested;
+  other FreeBuds models may use another RFCOMM channel.
 - Razer: which user-mode HID collection, if any, carries the dongle's battery-change notifications.

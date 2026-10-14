@@ -13,6 +13,7 @@ and BetopGame do not need to be running. It only ever sends read commands: see
 |---|---|---|
 | Logitech | LIGHTSPEED and Unifying receivers and their HID++ devices, e.g. PRO X2 SUPERSTRIKE; also a mouse on its own cable | HID++ battery features 0x1004, 0x1000, 0x1001, 0x1F20 |
 | ROG | OMNI receivers and the keyboards/mice paired to them, e.g. Azoth X; Azoth X on USB; Cetra Open Wireless earbuds (left/right/case) | ROG vendor reports `12 01` / `12 07`, Cetra `0xCC` |
+| HUAWEI | FreeBuds/FreeClip earbuds over Bluetooth, e.g. FreeClip 2 (left/right/case) | HUAWEI serial protocol over RFCOMM; Windows' own (approximate) value as a fallback |
 
 ## Command line
 

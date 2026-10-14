@@ -1,5 +1,6 @@
 using BatteryInfo.Core.Diagnostics;
 using BatteryInfo.Core.Monitoring;
+using BatteryInfo.Core.Vendors.Huawei;
 using BatteryInfo.Core.Vendors.Logitech;
 using BatteryInfo.Core.Vendors.Rog;
 
@@ -12,6 +13,7 @@ public static class ProviderFactory
     [
         () => new LogitechBatteryProvider(),
         () => new RogBatteryProvider(),
+        () => new HuaweiBatteryProvider(),
     ];
 
     public static IReadOnlyList<IBatteryProvider> CreateAll() => Create(Factories);
