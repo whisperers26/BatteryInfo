@@ -58,6 +58,16 @@ public class DeviceTextTests
     }
 
     [Fact]
+    public void Approximate_values_read_from_the_device_are_estimated()
+    {
+        var fromVoltage = Mouse(DeviceStatus.Online, 81, approximate: true) with { Source = "HID++ 0x1001" };
+
+        Assert.Equal("Estimated", DeviceText.StatusLine(Fresh(fromVoltage), Now));
+        Assert.Equal("Estimated · Charging",
+            DeviceText.StatusLine(Fresh(Mouse(DeviceStatus.Online, 50, ChargeState.Charging, approximate: true)), Now));
+    }
+
+    [Fact]
     public void Online_with_a_detail_shows_the_detail()
     {
         Assert.Equal("Timed out reading devices.",

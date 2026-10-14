@@ -9,7 +9,7 @@ public static class DeviceText
     public const string Separator = " · ";
 
     /// <summary>The second line of a device row: "Charging", "Asleep · 82 % 14 min ago",
-    /// "Not connected · last 82 % yesterday", "Approx. from Windows", or the provider's detail.</summary>
+    /// "Not connected · last 82 % yesterday", "Approx. from Windows", "Estimated", or the provider's detail.</summary>
     /// <param name="now">The current local time.</param>
     public static string StatusLine(DeviceState state, DateTimeOffset now)
     {
@@ -62,10 +62,17 @@ public static class DeviceText
     private static string OnlineLine(DeviceReading reading)
     {
         var charge = ChargeLine(reading.Components);
-        if (reading.Approximate) return charge.Length == 0 ? "Approx. from Windows" : "Approx. from Windows" + Separator + charge;
+        if (reading.Approximate)
+        {
+            // Only the HFP fallback is Windows' value; a device's own voltage or coarse level is an estimate.
+            var approximate = IsFromWindows(reading) ? "Approx. from Windows" : "Estimated";
+            return charge.Length == 0 ? approximate : approximate + Separator + charge;
+        }
         if (reading.Detail is { Length: > 0 } detail) return detail;
         return charge.Length == 0 ? "Connected" : charge;
     }
+
+    private static bool IsFromWindows(DeviceReading reading) => reading.Source == DeviceReading.WindowsHfpSource;
 
     private static string ChargeLine(IReadOnlyList<BatteryComponent> components)
     {
