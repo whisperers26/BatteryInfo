@@ -342,6 +342,15 @@
                         <ColumnDefinition Width="*" />
                         <ColumnDefinition Width="Auto" />
                     </Grid.ColumnDefinitions>
+                    <TextBlock Text="Show first device's level in tray" Style="{StaticResource SettingLabelStyle}" />
+                    <CheckBox Grid.Column="1" Style="{StaticResource ToggleSwitchStyle}" VerticalAlignment="Center"
+                              IsChecked="{Binding TrayShowsLevel}" AutomationProperties.Name="Show first device's level in tray" />
+                </Grid>
+                <Grid MinHeight="36" Margin="0,0,6,0">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="Auto" />
+                    </Grid.ColumnDefinitions>
                     <TextBlock Text="Start with Windows" Style="{StaticResource SettingLabelStyle}" />
                     <CheckBox Grid.Column="1" Style="{StaticResource ToggleSwitchStyle}" VerticalAlignment="Center"
                               IsChecked="{Binding StartWithWindows}" AutomationProperties.Name="Start with Windows" />
