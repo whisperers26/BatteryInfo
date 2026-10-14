@@ -24,7 +24,7 @@ public sealed class HuaweiBatteryProvider : IBatteryProvider
     internal static readonly TimeSpan ReplyTimeout = TimeSpan.FromSeconds(2);
 
     private const string SppSource = "SPP";
-    private const string HfpSource = "HFP (approx.)";
+    private const string HfpSource = DeviceReading.WindowsHfpSource;
     private const string TraceChannel = "huawei";
     private const string UnsafeDetail = "Internal error: unsafe command refused";
 
