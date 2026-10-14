@@ -100,23 +100,37 @@ public sealed class HistoryStore(string directory, TimeProvider time)
             var reading = state.Latest;
             if (reading.Status == DeviceStatus.Offline || !reading.HasBattery) continue;
 
+            var switchedSet = SwitchesSet(reading, lastWritten);
             foreach (var component in reading.Components)
             {
                 if (component.Percent is null) continue;
                 var record = new HistoryRecord(reading.Timestamp, reading.DeviceId, reading.Name, reading.Vendor,
                     reading.Kind, component.Name, component.Percent, component.Charge, reading.Status, reading.Approximate);
                 var key = Key(record);
-                if (lastWritten.TryGetValue(key, out var previous) && !ShouldWrite(previous, record)) continue;
+                if (lastWritten.TryGetValue(key, out var previous) && !ShouldWrite(previous, record, switchedSet)) continue;
                 lastWritten[key] = record;
                 toWrite.Add(record);
             }
         }
     }
 
-    private static bool ShouldWrite(HistoryRecord previous, HistoryRecord record) =>
+    // A switch between a single value and named ones writes every value at once, so the set now read is always the
+    // newest in the history (see NewestSet); unchanged values would otherwise wait for the heartbeat.
+    private static bool ShouldWrite(HistoryRecord previous, HistoryRecord record, bool switchedSet) =>
         record.Time > previous.Time &&
-        (record.Percent != previous.Percent || record.Charge != previous.Charge || record.Status != previous.Status ||
-         record.Approximate != previous.Approximate || record.Time - previous.Time >= Heartbeat);
+        (switchedSet || record.Percent != previous.Percent || record.Charge != previous.Charge ||
+         record.Status != previous.Status || record.Approximate != previous.Approximate ||
+         record.Time - previous.Time >= Heartbeat);
+
+    private static bool SwitchesSet(DeviceReading reading, Dictionary<string, HistoryRecord> lastWritten)
+    {
+        var newest = lastWritten.Values
+            .Where(r => string.Equals(r.DeviceId, reading.DeviceId, StringComparison.OrdinalIgnoreCase))
+            .MaxBy(r => r.Time);
+        if (newest is null) return false;
+        var readingIsSingle = reading.Components.Where(c => c.Percent is not null).All(c => IsSingle(c.Name));
+        return IsSingle(newest.Component) != readingIsSingle;
+    }
 
     private static string Key(HistoryRecord record) => $"{record.DeviceId}\n{record.Component}";
 

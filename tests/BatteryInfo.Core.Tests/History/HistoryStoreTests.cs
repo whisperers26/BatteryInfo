@@ -342,6 +342,43 @@ public sealed class HistoryStoreTests : IDisposable
     }
 
     [Fact]
+    public void Unchanged_bud_values_after_a_short_Windows_fallback_are_written_again_at_once()
+    {
+        var store = NewStore();
+        store.Append([Earbuds(70, 72, 50)]);
+        _time.Advance(TimeSpan.FromMinutes(2));
+        store.Append([EarbudsFromWindows(75)]);
+        _time.Advance(TimeSpan.FromMinutes(2));
+        store.Append([Earbuds(70, 72, 50)]);
+        var back = _time.GetUtcNow();
+
+        var reading = Assert.Single(NewStore().LastKnownReadings());
+
+        Assert.Equal(["Left", "Right", "Case"], reading.Components.Select(c => c.Name));
+        Assert.False(reading.Approximate);
+        Assert.Equal(back, reading.Timestamp);
+        Assert.Equal(7, store.Query("huawei:C0DA5EA83EC7", DateTimeOffset.MinValue).Count);
+    }
+
+    [Fact]
+    public void An_unchanged_Windows_value_after_a_short_per_bud_read_is_written_again_at_once()
+    {
+        var store = NewStore();
+        store.Append([EarbudsFromWindows(75)]);
+        _time.Advance(TimeSpan.FromMinutes(2));
+        store.Append([Earbuds(70, 72, 50)]);
+        _time.Advance(TimeSpan.FromMinutes(2));
+        store.Append([EarbudsFromWindows(75)]);
+        var back = _time.GetUtcNow();
+
+        var reading = Assert.Single(NewStore().LastKnownReadings());
+
+        Assert.Equal(BatteryComponent.Single(75, ChargeState.Unknown), Assert.Single(reading.Components));
+        Assert.True(reading.Approximate);
+        Assert.Equal(back, reading.Timestamp);
+    }
+
+    [Fact]
     public void Prune_deletes_month_files_that_ended_before_the_cutoff()
     {
         Directory.CreateDirectory(_directory);
