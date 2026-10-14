@@ -3,6 +3,7 @@ using System.Windows;
 using System.Windows.Interop;
 using System.Windows.Media;
 using System.Windows.Threading;
+using BatteryInfo.App.Demo;
 using BatteryInfo.App.Flyout;
 using BatteryInfo.App.Interop;
 using BatteryInfo.App.Tray;
@@ -67,13 +68,22 @@ public partial class App : Application, IFlyoutServices
         Log.Info($"BatteryInfo starting (args: {string.Join(' ', e.Args)}; per-monitor DPI set: {DpiAwarenessSet})");
         HookUnhandledExceptions();
 
-        _history = new HistoryStore(Path.Combine(root, "history"), _time);
+        var historyDirectory = Path.Combine(root, "history");
+        if (_options.Demo) DemoHistory.Reset(historyDirectory);
+        _history = new HistoryStore(historyDirectory, _time);
+        if (_options.Demo)
+        {
+            var started = _time.GetTimestamp();
+            DemoHistory.Write(_history, _time.GetLocalNow());
+            Log.Info($"Wrote demo history in {_time.GetElapsedTime(started).TotalMilliseconds:0} ms");
+        }
         _history.Prune(HistoryKeep);
         var store = new DeviceStore(_time);
         foreach (var reading in _history.LastKnownReadings()) store.Seed(reading);
 
-        var providers = ProviderFactory.CreateAll();
-        _monitor = new BatteryMonitor(providers, store, new CmDeviceChangeWatcher(), _time,
+        IReadOnlyList<IBatteryProvider> providers = _options.Demo ? [new DemoBatteryProvider(_time)] : ProviderFactory.CreateAll();
+        IDeviceChangeSource? changes = _options.Demo ? null : new CmDeviceChangeWatcher();
+        _monitor = new BatteryMonitor(providers, store, changes, _time,
             TimeSpan.FromSeconds(_settings.PollIntervalSeconds), ProviderTimeout);
         _monitor.SnapshotChanged += OnSnapshotChanged;
 
