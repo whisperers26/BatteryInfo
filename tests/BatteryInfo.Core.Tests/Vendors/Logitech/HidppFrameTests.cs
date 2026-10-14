@@ -150,6 +150,23 @@ public class HidppFrameTests
         Assert.Equal(new HidppFeatureInfo(0x06, 0x00, 0x05), HidppProtocol.ParseFeatureInfo(reply));
     }
 
+    [Fact]
+    public void Get_feature_id_asks_feature_set_fn1_for_the_index_in_p0()
+    {
+        Assert.Equal(Bytes("10 01 01 1C 06 00 00"), HidppProtocol.GetFeatureId(0x01, featureSetIndex: 0x01, featureIndex: 0x06, 0x0C));
+    }
+
+    [Fact]
+    public void Get_feature_id_reply_gives_the_feature_id_big_endian()
+    {
+        // Verified: getFeatureId(06) -> 10 04 00 05 (feature 0x1004, type 0, version 5).
+        var request = HidppProtocol.GetFeatureId(0x01, 0x01, 0x06, 0x0E);
+        var reply = Long("11 01 01 1E 10 04 00 05");
+
+        Assert.Equal(HidppMatchKind.Reply, HidppProtocol.Match(request, reply).Kind);
+        Assert.Equal(HidppFeature.UnifiedBattery, HidppProtocol.ParseFeatureId(reply));
+    }
+
     [Theory]
     [InlineData("10 01 41 0C 02 BD 40", true)]
     [InlineData("10 01 41 0C 42 BD 40", false)]

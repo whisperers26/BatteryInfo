@@ -112,6 +112,11 @@ public static class HidppProtocol
     public static byte[] GetFeature(byte deviceIndex, ushort featureId, byte softwareId) =>
         FeatureRequest(deviceIndex, 0x00, 0, softwareId, (byte)(featureId >> 8), (byte)featureId);
 
+    /// <summary>FEATURE_SET (0x0001) fn1 getFeatureId: which feature is at <paramref name="featureIndex"/>. Sent to
+    /// the index FEATURE_SET itself was resolved at.</summary>
+    public static byte[] GetFeatureId(byte deviceIndex, byte featureSetIndex, byte featureIndex, byte softwareId) =>
+        FeatureRequest(deviceIndex, featureSetIndex, 1, softwareId, featureIndex);
+
     /// <summary>HID++ 1.0 GET_REGISTER (0x81).</summary>
     public static byte[] ReadRegister(byte deviceIndex, byte register) =>
         [ShortReportId, deviceIndex, GetRegister, register, 0x00, 0x00, 0x00];
@@ -145,6 +150,9 @@ public static class HidppProtocol
     public static (int Major, int Minor) ParsePingReply(ReadOnlySpan<byte> reply) => (reply[4], reply[5]);
 
     public static HidppFeatureInfo ParseFeatureInfo(ReadOnlySpan<byte> reply) => new(reply[4], reply[5], reply[6]);
+
+    /// <summary>FEATURE_SET fn1 getFeatureId: r0..r1 = feature id (big-endian), r2 = type, r3 = version (§6).</summary>
+    public static ushort ParseFeatureId(ReadOnlySpan<byte> reply) => (ushort)(reply[4] << 8 | reply[5]);
 
     /// <summary>B5/03: payload[1..4] = receiver serial, payload[6] = max devices (§4c). Payload starts at byte 4.</summary>
     public static HidppReceiverInfo ParseReceiverInfo(ReadOnlySpan<byte> reply) =>
