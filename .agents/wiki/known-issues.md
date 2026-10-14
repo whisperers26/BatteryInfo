@@ -31,6 +31,10 @@ owner's hardware. Back to [AGENTS.md](../../AGENTS.md). Remove an entry once it 
 - Does polling every 2 minutes delay the Azoth X's idle sleep? The interval is a setting.
 - FreeClip: the SPP channel is exclusive per PC; while another app holds it, the HFP value is shown,
   which can overstate by about 5 points. Whether TLV 1 is min(L, R) or the right bud is unknown.
+- FreeClip low-battery alert: once an earbud has alerted over SPP, the HFP value does not alert until
+  SPP shows that bud charging or above the alert level + 5. If the buds are recharged in the case
+  unseen and another app holds SPP for the whole next discharge, that discharge gets no alert. HFP
+  cannot re-arm the bud's alert while it is unknown which bud the HFP value follows.
 - FreeClip charging flags (TLV 3) have never been non-zero live, and only the FreeClip 2 is tested;
   other FreeBuds models may use another RFCOMM channel.
 - Razer: which user-mode HID collection, if any, carries the dongle's battery-change notifications.
