@@ -23,6 +23,8 @@ into firmware-update mode.
 5. **Update the README** in the same PR when what the user sees changes.
 6. **No NuGet packages** in `BatteryInfo.Core`, `BatteryInfo.App` or `BatteryInfo.Cli`, except Velopack in
    `BatteryInfo.App` (installer and updates).
+7. **Releases bump the patch version only** (1.1.0 → 1.1.1, never 1.2.0) unless the owner explicitly asks
+   for a bigger step. Tag the next version after the latest `v*` tag.
 
 ## Commands
 
