@@ -10,6 +10,7 @@ public interface IFlyoutServices
 
     Task RefreshAsync();
 
+    /// <summary>Reads one device's chart series from disk. Called on a thread-pool thread.</summary>
     IReadOnlyList<HistorySeries> LoadHistory(string deviceId, DateTimeOffset since);
 
     bool IsStartWithWindowsEnabled();

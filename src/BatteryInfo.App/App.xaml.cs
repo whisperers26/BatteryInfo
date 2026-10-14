@@ -223,6 +223,7 @@ public partial class App : Application, IFlyoutServices
 
     Task IFlyoutServices.RefreshAsync() => _monitor?.RefreshAsync() ?? Task.CompletedTask;
 
+    // On a pool thread: HistoryStore is thread-safe, and _settings is an immutable record swapped whole.
     IReadOnlyList<HistorySeries> IFlyoutServices.LoadHistory(string deviceId, DateTimeOffset since)
     {
         if (_history is null) return [];

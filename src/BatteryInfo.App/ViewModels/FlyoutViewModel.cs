@@ -2,6 +2,7 @@ using System.Collections.ObjectModel;
 using System.Globalization;
 using BatteryInfo.Core.Diagnostics;
 using BatteryInfo.Core.Monitoring;
+using BatteryInfo.Core.Presentation;
 using BatteryInfo.Core.Settings;
 
 namespace BatteryInfo.App.ViewModels;
@@ -15,6 +16,7 @@ public sealed class FlyoutViewModel : ObservableObject
 
     private readonly IFlyoutServices _services;
     private readonly RelayCommand _refreshCommand;
+    private readonly LatestLoad _historyLoad = new();
     private IReadOnlyList<DeviceState> _snapshot = [];
     private DateTimeOffset? _lastRefresh;
     private string _updatedText = "Not updated yet";
@@ -146,18 +148,25 @@ public sealed class FlyoutViewModel : ObservableObject
         }
     }
 
-    // One row open at a time keeps the flyout short.
+    // One row open at a time keeps the flyout short, so one load at a time serves every row: a collapse drops
+    // the load still running, and the newest load wins.
     private void OnExpandedChanged(DeviceViewModel device)
     {
-        if (!device.IsExpanded) return;
+        if (!device.IsExpanded)
+        {
+            _historyLoad.Cancel();
+            return;
+        }
         foreach (var other in Devices.Where(d => d != device)) other.IsExpanded = false;
         LoadHistory(device, _services.Now);
     }
 
+    // Reading and parsing the month files takes milliseconds that grow with the history: never on the UI thread.
     private void LoadHistory(DeviceViewModel device, DateTimeOffset now)
     {
         var from = now - HistoryRange;
-        device.SetHistory(_services.LoadHistory(device.Id, from), from, now);
+        var id = device.Id;
+        _ = _historyLoad.RunAsync(() => _services.LoadHistory(id, from), history => device.SetHistory(history, from, now));
     }
 
     private void UpdateUpdatedText()
