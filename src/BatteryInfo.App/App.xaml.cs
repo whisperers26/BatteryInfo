@@ -52,6 +52,7 @@ public partial class App : Application, IFlyoutServices
         RenderOptions.ProcessRenderMode = RenderMode.SoftwareOnly;
         base.OnStartup(e);
         _options = StartupOptions.Parse(e.Args);
+        if (_options.Theme is { } theme) ThemeMode = theme == "light" ? ThemeMode.Light : ThemeMode.Dark;
         var instanceName = _options.Demo ? InstanceName + ".Demo" : InstanceName;
         _instance = SingleInstance.TryAcquire(instanceName);
         if (_instance is null)
