@@ -182,7 +182,7 @@ public class AppleBroadcastTrackerTests
         Twice(tracker, Stranger, -50, Frame(3, 3));
 
         Assert.Equal(Stranger, tracker.Snapshot().Address);
-        Assert.Equal(AppleBroadcastTracker.StrongestRule, tracker.Snapshot().Rule);
+        Assert.Equal(AppleBroadcastTracker.OnlyPairRule, tracker.Snapshot().Rule); // the only pair in range
     }
 
     [Fact]
@@ -417,9 +417,11 @@ public class AppleBroadcastTrackerTests
         var tracker = Tracker();
         tracker.Connected(null);
         Twice(tracker, Stranger, -50, Frame(3, 3, @case: 4));
+        Twice(tracker, OtherStranger, -70, Frame(6, 6));
         Wait(6);
         tracker.Offer(Stranger, -50, Frame(3, 3, @case: 4));
         Assert.Equal(Stranger, tracker.Snapshot().Address);
+        Assert.Equal(AppleBroadcastTracker.StrongestRule, tracker.Snapshot().Rule);
         tracker.Disconnected();
         Wait(5 * 60);
 
@@ -429,6 +431,52 @@ public class AppleBroadcastTrackerTests
         Assert.Equal(Ours, tracker.Snapshot().Address);
         Assert.Equal(Pods(90, 90), tracker.Snapshot().Components);
     }
+
+    [Fact]
+    public void The_only_pair_in_range_is_followed_through_address_changes_with_its_case()
+    {
+        // The owner's log: the app started with the AirPods connected, and every time a pod went into the case or came
+        // out, the pods took a new address.
+        var tracker = Tracker();
+        tracker.Connected(null);
+        Twice(tracker, Ours, -60, Frame(9, 9));
+        Wait(6);
+        tracker.Offer(Ours, -60, Frame(9, 9));
+        Assert.Equal(AppleBroadcastTracker.OnlyPairRule, tracker.Snapshot().Rule);
+
+        // A pod goes into the case: a new address reports the case; the old one goes silent.
+        Wait(31);
+        Twice(tracker, OurOtherPod, -50, Frame(9, 9, @case: 6, caseCharging: true));
+        Assert.Equal(OurOtherPod, tracker.Snapshot().Address);
+        Assert.Equal(new BatteryComponent("Case", 60, ChargeState.Charging), tracker.Snapshot().Components[2]);
+
+        // The pod comes out: another new address, no case level. The case is kept, never "–", and nothing waits.
+        const ulong third = 0x4A3333333333;
+        Wait(20);
+        Assert.Equal(Pods(90, 90, 60), Unchanged(tracker.Snapshot().Components));
+        Wait(11);
+        Twice(tracker, third, -60, Frame(9, 9));
+        Assert.Equal(third, tracker.Snapshot().Address);
+        Assert.Equal(AppleBroadcastTracker.ContinuityRule, tracker.Snapshot().Rule);
+        Assert.Equal(60, tracker.Snapshot().Components[2].Percent);
+    }
+
+    [Fact]
+    public void A_pick_on_signal_is_not_trusted_while_another_pair_of_the_model_is_in_range()
+    {
+        var tracker = Tracker();
+        tracker.Connected(null);
+        Twice(tracker, Ours, -60, Frame(9, 9));
+        Twice(tracker, Stranger, -75, Frame(3, 3));
+        Wait(6);
+
+        tracker.Offer(Ours, -60, Frame(9, 9));
+
+        Assert.Equal(AppleBroadcastTracker.StrongestRule, tracker.Snapshot().Rule);
+    }
+
+    private static IReadOnlyList<BatteryComponent> Unchanged(IReadOnlyList<BatteryComponent> components) =>
+        components.Select(c => c with { Charge = ChargeState.Unknown }).ToList();
 
     [Fact]
     public void A_new_connect_forgets_the_choice_and_the_levels()

@@ -234,6 +234,12 @@ The tracker (`AppleBroadcastTracker`, one per paired device) uses these rules:
       started with the AirPods connected, and the CLI), 30 s after a known connect, 10 s after the followed
       address went silent.
 
+      When every address of the model heard in the last 2 minutes agrees on the levels (within one step), there
+      is one pair in range, and the pick counts as **only pair in range**: it is trusted like one made at the
+      connect, so its levels carry over address changes and its case level is remembered. Only a pick with
+      another pair of different levels in range stays "strongest". This matters because the pods take a new
+      address every time one goes into the case or comes out (the owner's log: five addresses in 20 minutes).
+
    When more than one address matches the same rule, the strongest wins.
 4. On every connect the choice and the levels start afresh.
 
