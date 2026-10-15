@@ -23,6 +23,13 @@ owner's hardware. Back to [AGENTS.md](../../AGENTS.md). Remove an entry once it 
   from HeadsetControl only; the Arctis Nova 5 (1038:2232) is untested.
 - **Betop**: charging (byte 4 low nibble 1) comes from BetopGame's UI code only; sibling models other
   than the KP70C2 are untested.
+- **Apple**: nothing received from real AirPods. The owner's AirPods 4 (ANC) are paired but were not connected,
+  and none were in range during 30 minutes of listening. Checked so far:
+  - live: the passive scan on this PC (Apple entries arrive without the company id) and the PID read from their
+    BTHENUM records;
+  - offline: the decode, against Apple's own iOS code and logs and against four other decoders run over 148
+    published frames;
+  - with fakes only: the choice of which broadcast is the owner's.
 
 - **Tray app**: a physical click on the Windows 11 tray icon (tests sent the icon's callback message),
   refresh after a real sleep/resume, a taskbar theme change while running, and taskbars on the left,
@@ -48,3 +55,13 @@ owner's hardware. Back to [AGENTS.md](../../AGENTS.md). Remove an entry once it 
 - FreeClip charging flags (TLV 3) have never been non-zero live, and only the FreeClip 2 is tested;
   other FreeBuds models may use another RFCOMM channel.
 - Razer: which user-mode HID collection, if any, carries the dongle's battery-change notifications.
+- AirPods 4: AndroPods reports that firmware 8B39 sends no Proximity Pairing frames at all; capod received them
+  from other AirPods 4. If the owner's pair sends none, the row stays at "Waiting for its Bluetooth battery
+  broadcast".
+- AirPods: whether the broadcast levels keep updating during a long session with a non-Apple host (frames kept
+  coming while worn and playing music on Windows, but the MagicPods author says status stops updating there).
+- AirPods: a same-model pair nearby can be followed instead of the owner's when it appeared at the connect or has
+  the same levels; nothing short of Apple's identity key (AAP only) can rule that out. The `07 0F 00` frame and
+  the `07 19 07` frame from the identity address at connect may carry a usable link; their layouts are unknown.
+- AirPods: whether Windows ever gets a level over hands-free (`AT+IPHONEACCEV`); if it does, it is shown while no
+  broadcast is fresh.
