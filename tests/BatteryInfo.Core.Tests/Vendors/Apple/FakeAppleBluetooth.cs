@@ -53,9 +53,11 @@ internal sealed class FakeAppleBluetooth : IAppleBluetooth
         AdvertisementReceived?.Invoke(this, new BleAdvertisement(address, false, rssi, "ScannableUndirected", AppleVectors.Bytes(hex)));
     }
 
-    public void FailListening(string reason)
+    /// <summary>The scan stops on its own. With <paramref name="stopsScan"/> false, this is a late report from an
+    /// older scan while a newer one runs.</summary>
+    public void FailListening(string reason, bool stopsScan = true)
     {
-        IsListening = false;
+        if (stopsScan) IsListening = false;
         ListeningFailed?.Invoke(this, reason);
     }
 

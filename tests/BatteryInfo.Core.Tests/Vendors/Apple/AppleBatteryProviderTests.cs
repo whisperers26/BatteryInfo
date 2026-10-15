@@ -295,23 +295,66 @@ public class AppleBatteryProviderTests
         Assert.Equal("Bluetooth LE scan failed: The radio is off", reading.Detail);
 
         _bluetooth.StartError = null;
-        Assert.Equal(DeviceStatus.Online, (await PollOne(provider)).Status);
+        Wait(61);
+        Assert.Equal(DeviceStatus.Error, (await PollOne(provider)).Status); // until a broadcast proves the scan works
         Assert.True(_bluetooth.IsListening);
+
+        _bluetooth.Advertise(Stranger, -40, StrangerFrame);
+        Assert.Equal(DeviceStatus.Online, (await PollOne(provider)).Status);
     }
 
     [Fact]
-    public async Task A_scan_that_stops_on_its_own_is_started_again_at_the_next_poll()
+    public async Task A_scan_that_stops_on_its_own_is_started_again_a_minute_later()
+    {
+        using var provider = await ConnectedProvider();
+        var refreshes = 0;
+        provider.RefreshRequested += (_, _) => refreshes++;
+        Wait(4 * 60); // the levels are no longer fresh
+
+        _bluetooth.FailListening("RadioNotAvailable");
+        Assert.Equal(1, refreshes);
+        var reading = await PollOne(provider);
+        Assert.False(_bluetooth.IsListening);
+        Assert.Equal("Bluetooth LE scan failed: RadioNotAvailable", reading.Detail);
+
+        Wait(61);
+        await provider.PollAsync(CancellationToken.None);
+        Assert.True(_bluetooth.IsListening);
+        Assert.Equal(2, _bluetooth.Starts);
+    }
+
+    [Fact]
+    public async Task A_scan_that_keeps_stopping_neither_restarts_nor_asks_for_refreshes_in_a_loop()
     {
         using var provider = await ConnectedProvider();
         var refreshes = 0;
         provider.RefreshRequested += (_, _) => refreshes++;
 
-        _bluetooth.FailListening("RadioNotAvailable");
+        for (var i = 0; i < 10; i++)
+        {
+            _bluetooth.FailListening("RadioNotAvailable");
+            Wait(2);
+            await provider.PollAsync(CancellationToken.None); // what each refresh would do
+        }
         Assert.Equal(1, refreshes);
-        await provider.PollAsync(CancellationToken.None);
+        Assert.Equal(1, _bluetooth.Starts);
 
-        Assert.True(_bluetooth.IsListening);
+        Wait(61);
+        await provider.PollAsync(CancellationToken.None);
+        _bluetooth.FailListening("RadioNotAvailable");
         Assert.Equal(2, _bluetooth.Starts);
+        Assert.Equal(1, refreshes);
+    }
+
+    [Fact]
+    public async Task A_late_failure_of_an_older_scan_is_ignored_while_a_newer_one_runs()
+    {
+        using var provider = await ConnectedProvider();
+        Wait(4 * 60);
+
+        _bluetooth.FailListening("RadioNotAvailable", stopsScan: false);
+
+        Assert.Equal("No battery broadcast for 4 min", (await PollOne(provider)).Detail);
     }
 
     [Fact]

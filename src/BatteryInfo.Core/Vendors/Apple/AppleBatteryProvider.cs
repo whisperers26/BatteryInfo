@@ -19,6 +19,10 @@ public sealed class AppleBatteryProvider : IBatteryProvider
     /// gets a value. Later polls never wait: the provider asks for a refresh when a value arrives.</summary>
     internal static readonly TimeSpan DefaultFirstFrameWait = TimeSpan.FromSeconds(10);
 
+    /// <summary>How long after a failed scan the next start waits, so a scan Windows keeps stopping (the radio is off)
+    /// is not restarted, and every vendor polled, in a loop.</summary>
+    internal static readonly TimeSpan RestartDelay = TimeSpan.FromMinutes(1);
+
     private const string TraceChannel = "apple";
     private const string FindMySuffix = " - Find My";
     private const string FallbackName = "AirPods";
@@ -28,7 +32,9 @@ public sealed class AppleBatteryProvider : IBatteryProvider
     private readonly TimeSpan _firstFrameWait;
     private readonly object _gate = new();
     private readonly Dictionary<ulong, Slot> _slots = [];
-    private string? _listenError;
+    // Why the scan last failed, until an advertisement proves a scan works again.
+    private volatile string? _listenError;
+    private DateTimeOffset? _failedAt;
     private TaskCompletionSource? _firstValue;
     private bool _polled;
     private bool _disposed;
@@ -144,20 +150,22 @@ public sealed class AppleBatteryProvider : IBatteryProvider
             if (_bluetooth.IsListening) Log.Info("Apple: no AirPods or Beats paired; Bluetooth LE scan stopped");
             _bluetooth.StopListening();
             _listenError = null;
+            _failedAt = null;
             return;
         }
         if (_bluetooth.IsListening) return;
+        if (_failedAt is { } failed && _time.GetUtcNow() - failed < RestartDelay) return;
 
         try
         {
             _bluetooth.StartListening();
-            _listenError = null;
             foreach (var slot in _slots.Values) slot.Tracker?.ListeningStarted();
             Log.Info("Apple: listening for AirPods and Beats battery broadcasts (passive Bluetooth LE scan)");
         }
         catch (Exception e)
         {
             _listenError = e.Message;
+            _failedAt = _time.GetUtcNow();
             Log.Warn($"Apple: the Bluetooth LE scan could not start ({e.GetType().Name}: {e.Message})");
         }
     }
@@ -248,6 +256,7 @@ public sealed class AppleBatteryProvider : IBatteryProvider
 
     private void OnAdvertisement(object? sender, BleAdvertisement advertisement)
     {
+        if (_listenError is not null) ScanWorks();
         var data = advertisement.Data;
         if (data.Length == 0 || data[0] != AppleProximityProtocol.ProximityPairingType) return; // phones, Macs, AirTags
         Trace(advertisement);
@@ -277,10 +286,27 @@ public sealed class AppleBatteryProvider : IBatteryProvider
         RefreshRequested?.Invoke(this, EventArgs.Empty);
     }
 
+    private void ScanWorks()
+    {
+        lock (_gate)
+        {
+            _listenError = null;
+            _failedAt = null;
+        }
+    }
+
+    // Only the first failure since the scan last worked asks for a refresh, so the error is shown once, not in a loop.
     private void OnListeningFailed(object? sender, string reason)
     {
-        lock (_gate) _listenError = reason;
-        RefreshRequested?.Invoke(this, EventArgs.Empty);
+        bool first;
+        lock (_gate)
+        {
+            if (_disposed || _bluetooth.IsListening) return; // a late report from an older scan: a newer one runs
+            first = _failedAt is null;
+            _listenError = reason;
+            _failedAt = _time.GetUtcNow();
+        }
+        if (first) RefreshRequested?.Invoke(this, EventArgs.Empty);
     }
 
     private void OnConnectionChanged(object? sender, EventArgs e) => RefreshRequested?.Invoke(this, EventArgs.Empty);
