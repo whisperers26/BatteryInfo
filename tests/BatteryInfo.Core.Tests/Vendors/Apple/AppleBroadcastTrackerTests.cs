@@ -250,6 +250,27 @@ public class AppleBroadcastTrackerTests
     }
 
     [Fact]
+    public void Nothing_of_a_stranger_picked_on_signal_alone_is_kept_once_it_goes_silent()
+    {
+        var tracker = Tracker();
+        tracker.Connected(_time.GetUtcNow());
+        Twice(tracker, Ours, -70, Frame(8, 9, @case: 6));
+        Wait(31);
+        Twice(tracker, Stranger, -50, Frame(3, 3, @case: 4)); // ours went silent: the stranger is heard
+        Wait(11);
+        tracker.Offer(Stranger, -50, Frame(3, 3, @case: 4));
+        Assert.Equal(AppleBroadcastTracker.StrongestRule, tracker.Snapshot().Rule);
+        Wait(31);
+
+        // Ours come back reporting the left pod only: they continue the levels shown before the stranger.
+        Twice(tracker, OurOtherPod, -85, Frame(8, Unknown, fromLeft: true));
+
+        Assert.Equal(OurOtherPod, tracker.Snapshot().Address);
+        Assert.Equal(AppleBroadcastTracker.ContinuityRule, tracker.Snapshot().Rule);
+        Assert.Equal(Pods(80, null), tracker.Snapshot().Components);
+    }
+
+    [Fact]
     public void A_level_not_reported_keeps_the_last_reported_one()
     {
         var tracker = Tracker();

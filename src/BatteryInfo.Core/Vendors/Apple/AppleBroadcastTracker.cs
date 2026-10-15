@@ -165,8 +165,17 @@ public sealed class AppleBroadcastTracker(AppleModel model, TimeProvider time)
 
         if (_chosen is { } lost)
         {
-            // The levels it showed are what a new address must continue (unless they were only the strongest's).
-            if (_rule != StrongestRule) _reference = HeldLevels();
+            // The levels it showed are what a new address must continue. A choice made on signal alone may have been a
+            // stranger: its levels are dropped, and the reference stays the one from before it.
+            if (_rule != StrongestRule)
+            {
+                _reference = HeldLevels();
+            }
+            else
+            {
+                _held.Clear();
+                _lastHeard = null;
+            }
             Log.Info($"{model.Name}: {Format(lost)} went silent; looking for its next address");
             _chosen = null;
             _rule = null;
