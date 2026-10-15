@@ -27,6 +27,10 @@ in the tray. The installer is not code-signed, so Windows SmartScreen may ask yo
 (**More info**, then **Run anyway**). Turn on **Start with Windows** in the flyout (or the tray menu) to
 launch it at sign-in. Uninstall it from Windows Settings > Apps.
 
+Run the installer from Explorer or your browser. An app that sandboxes what it starts (such as the Claude desktop
+app's terminal) would install BatteryInfo only inside its sandbox, where Windows cannot see it: the Start menu
+shortcut then has no icon and does not start it. BatteryInfo shows a warning when it finds itself installed that way.
+
 ### Building it yourself
 
 ```
