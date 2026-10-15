@@ -159,7 +159,7 @@ public sealed class AppleBroadcastTracker(AppleModel model, TimeProvider time)
                 _rule = better.Rule;
                 return false;
             }
-            Follow(better, now, keepLevels: false);
+            Follow(better, keepLevels: false);
             return true;
         }
 
@@ -174,7 +174,7 @@ public sealed class AppleBroadcastTracker(AppleModel model, TimeProvider time)
         }
 
         if (Best(now, allowStrongest: now >= _strongestAllowedAt) is not { } pick) return false;
-        Follow(pick, now, keepLevels: pick.Rule == ContinuityRule);
+        Follow(pick, keepLevels: pick.Rule == ContinuityRule);
         return true;
     }
 
@@ -196,7 +196,7 @@ public sealed class AppleBroadcastTracker(AppleModel model, TimeProvider time)
         return best;
     }
 
-    private void Follow(Pick pick, DateTimeOffset now, bool keepLevels)
+    private void Follow(Pick pick, bool keepLevels)
     {
         _chosen = pick.Address;
         _rule = pick.Rule;
@@ -207,7 +207,7 @@ public sealed class AppleBroadcastTracker(AppleModel model, TimeProvider time)
         }
         if (pick.Rule != StrongestRule) _reference = null;
         var rssi = pick.Rssi == double.MinValue ? "no signal value" : $"{pick.Rssi.ToString("0", CultureInfo.InvariantCulture)} dBm";
-        Log.Info($"{model.Name}: following {Format(pick.Address)} ({pick.Rule}, {rssi}) at {now:HH:mm:ss}");
+        Log.Info($"{model.Name}: following {Format(pick.Address)} ({pick.Rule}, {rssi})");
     }
 
     // The levels a new address must continue: within one 10 % step on every level both report, at least one of them.
