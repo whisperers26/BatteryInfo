@@ -18,7 +18,7 @@ at all: see [docs/protocols](docs/protocols/README.md).
 | Betop (Beitong) | 2.4 GHz controllers with plain-byte dongles, e.g. KP70C2 (also KP20/KP40/KP50/KP70 variants, untested) | Betop vendor report `02 15` |
 | Razer | Basilisk V3 Pro 35K on its HyperSpeed dongle or cable (not yet tested on hardware) | Razer 90-byte feature report `07/80`, `07/84` |
 | SteelSeries | Arctis Nova 5X (and Nova 5, untested) through its wireless base station | SteelSeries status report `00 B0` |
-| Apple | AirPods (1st generation to AirPods 5), AirPods Pro 1-3, AirPods Max and Beats earbuds and headphones paired with the PC (not yet tested on hardware) | the battery broadcast AirPods send to nearby Apple devices, only listened to, in 10 % steps |
+| Apple | AirPods (1st generation to AirPods 5), AirPods Pro 1-3, AirPods Max and Beats earbuds and headphones paired with the PC (tested with AirPods 4 ANC) | the battery broadcast AirPods send to nearby Apple devices, only listened to, in 10 % steps |
 
 ## Install and run
 
@@ -74,8 +74,8 @@ of that build first. A local build does not update itself.
   - **Telling yours apart:** AirPods change their broadcast address every few minutes, so the app follows the one that
     appeared when they connected, or whose levels match the last ones shown. A nearby pair of the same model can
     still be taken for yours.
-  - **No broadcast:** the row says "Waiting for its Bluetooth battery broadcast", or for how long none has come. Some
-    AirPods 4 firmware is reported to send none to non-Apple devices.
+  - **No broadcast:** the row says "Waiting for its Bluetooth battery broadcast", or for how long none has come. One
+    report says some AirPods 4 firmware sends none to non-Apple devices.
 - `BatteryInfo.exe --demo` shows sample devices in every state; `--theme=light|dark` overrides the Windows theme.
 - In the demo, Start with Windows only flips the switch: it is not saved and does not change what starts at sign-in.
 
