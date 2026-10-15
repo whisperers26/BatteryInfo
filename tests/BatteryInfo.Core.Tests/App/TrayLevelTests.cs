@@ -35,12 +35,36 @@ public class TrayLevelTests
     }
 
     [Fact]
-    public void Earbuds_give_their_lowest_value_and_charge_if_any_part_does()
+    public void Earbuds_give_their_lowest_value_and_charge_if_either_does()
+    {
+        var level = TrayLevel.First(
+        [
+            State("a", DeviceStatus.Online, new BatteryComponent("Left", 80, ChargeState.Discharging),
+                new BatteryComponent("Right", 70, ChargeState.Charging)),
+        ]);
+
+        Assert.Equal(new TrayLevel(70, true), level);
+    }
+
+    [Fact]
+    public void The_case_is_left_out_while_an_earbud_has_a_value()
     {
         var level = TrayLevel.First(
         [
             State("a", DeviceStatus.Online, new BatteryComponent("Left", 80, ChargeState.Discharging),
                 new BatteryComponent("Right", 70, ChargeState.Discharging), new BatteryComponent("Case", 30, ChargeState.Charging)),
+        ]);
+
+        Assert.Equal(new TrayLevel(70, false), level);
+    }
+
+    [Fact]
+    public void The_case_gives_the_level_when_it_is_the_only_value()
+    {
+        var level = TrayLevel.First(
+        [
+            State("a", DeviceStatus.Online, new BatteryComponent("Left", null, ChargeState.Unknown),
+                new BatteryComponent("Case", 30, ChargeState.Charging)),
         ]);
 
         Assert.Equal(new TrayLevel(30, true), level);
