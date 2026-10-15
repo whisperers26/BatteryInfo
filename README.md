@@ -69,8 +69,9 @@ of that build first. A local build does not update itself.
   the tray menu checks now, and **Restart to update** installs a downloaded version right away.
 - AirPods and Beats show what they broadcast to nearby Apple devices, so their levels come in 10 % steps: "≈80 %"
   means 80-89 %, and the row says "In 10 % steps". The app only listens, with Bluetooth on, and sends them nothing.
-  - **Case:** the case only reports while a pod is in it or its lid is open. While the pods keep broadcasting, its
-    level is kept for 10 minutes and then shows "–".
+  - **Case:** AirPods report the case only while a pod is in it; an open, empty case reports nothing. So while you
+    wear them, the case shows the level from the last time a pod was in it, for up to 6 hours, and the row says
+    "Case read at 14:05". After that, or if it was never read, it shows "–".
   - **Telling yours apart:** AirPods change their broadcast address every few minutes, so the app follows the one that
     appeared when they connected, or whose levels match the last ones shown, and otherwise the strongest one nearby
     (always so when the app starts with them already connected). A nearby pair of the same model can still be taken
