@@ -23,6 +23,14 @@ public sealed record AppleModel(ushort Id, string Name, AppleLayout Layout, Devi
     private const string Right = "Right";
     private const string Case = "Case";
 
+    /// <summary>The names of the batteries <see cref="Components"/> reports, in order.</summary>
+    public IReadOnlyList<string> ComponentNames => Layout switch
+    {
+        AppleLayout.OneBattery => [""],
+        AppleLayout.EarbudsWithoutCaseBattery => [Left, Right],
+        _ => [Left, Right, Case],
+    };
+
     /// <summary>The batteries one status frame reports: Left, Right and (when the case has a battery) Case, or a single
     /// one. A level not reported is null, and charging is only shown for a reported level.</summary>
     public IReadOnlyList<BatteryComponent> Components(ProximityStatus status)
