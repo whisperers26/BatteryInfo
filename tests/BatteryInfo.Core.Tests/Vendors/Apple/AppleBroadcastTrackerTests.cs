@@ -17,7 +17,13 @@ public class AppleBroadcastTrackerTests
 
     private readonly ManualTimeProvider _time = new();
 
-    private AppleBroadcastTracker Tracker(AppleModel? model = null) => new(model ?? AirPodsPro, _time);
+    /// <summary>A tracker whose scan has run long enough that every address in range has been heard.</summary>
+    private AppleBroadcastTracker Tracker(AppleModel? model = null)
+    {
+        var tracker = new AppleBroadcastTracker(model ?? AirPodsPro, _time);
+        _time.Advance(AppleBroadcastTracker.AlreadyAroundFor);
+        return tracker;
+    }
 
     /// <summary>A status frame with levels in tenths (15 = not reported), sent by the right pod unless said otherwise.</summary>
     private static ProximityStatus Frame(int left, int right, int @case = Unknown, bool fromLeft = false,
@@ -97,6 +103,37 @@ public class AppleBroadcastTrackerTests
         Twice(tracker, Ours, -85, Frame(8, 9));
 
         Assert.Equal(AppleBroadcastTracker.BornAtConnectRule, tracker.Snapshot().Rule);
+    }
+
+    [Fact]
+    public void Addresses_heard_as_the_scan_starts_were_already_around_and_are_not_new_at_a_connect()
+    {
+        var tracker = new AppleBroadcastTracker(AirPodsPro, _time);
+        Twice(tracker, Stranger, -50, Frame(3, 3));
+        Wait(20);
+        tracker.Connected(_time.GetUtcNow());
+
+        Twice(tracker, Stranger, -50, Frame(3, 3));
+        Assert.Null(tracker.Snapshot().Address);
+
+        Twice(tracker, Ours, -80, Frame(8, 9));
+        Assert.Equal(Ours, tracker.Snapshot().Address);
+        Assert.Equal(AppleBroadcastTracker.BornAtConnectRule, tracker.Snapshot().Rule);
+    }
+
+    [Fact]
+    public void A_restarted_scan_hears_the_addresses_in_range_afresh()
+    {
+        var tracker = Tracker();
+        Wait(10 * 60);
+        tracker.ListeningStarted();
+        Twice(tracker, Stranger, -50, Frame(3, 3));
+        Wait(5);
+
+        tracker.Connected(_time.GetUtcNow());
+        Twice(tracker, Stranger, -50, Frame(3, 3));
+
+        Assert.Null(tracker.Snapshot().Address);
     }
 
     [Fact]

@@ -50,6 +50,10 @@ public sealed class AppleBroadcastTracker(AppleModel model, TimeProvider time)
 
     internal static readonly TimeSpan BornAfterConnect = TimeSpan.FromSeconds(30);
 
+    /// <summary>Addresses first heard this soon after the scan started were already in range, so they never count as
+    /// new at a connect: every address seems new when the scan has only just begun.</summary>
+    internal static readonly TimeSpan AlreadyAroundFor = TimeSpan.FromSeconds(10);
+
     /// <summary>How long every address in range gets to be heard before the strongest rule picks one, when the connect
     /// moment is unknown, or after the followed address went silent.</summary>
     internal static readonly TimeSpan SettleUnknownConnect = TimeSpan.FromSeconds(5);
@@ -72,8 +76,13 @@ public sealed class AppleBroadcastTracker(AppleModel model, TimeProvider time)
     private string? _rule;
     private IReadOnlyList<BatteryComponent>? _reference;
     private DateTimeOffset? _lastHeard;
+    private DateTimeOffset _listeningSince = time.GetUtcNow();
 
     public AppleModel Model => model;
+
+    /// <summary>The scan (re)started now: the addresses in range are about to be heard again. A new tracker assumes the
+    /// scan started when it was created.</summary>
+    public void ListeningStarted() => _listeningSince = time.GetUtcNow();
 
     /// <summary>The device connected: start over. <paramref name="at"/> is when, or null when that is not known
     /// (it was already connected when first seen).</summary>
@@ -235,7 +244,8 @@ public sealed class AppleBroadcastTracker(AppleModel model, TimeProvider time)
     }
 
     private bool IsBornAtConnect(Candidate candidate) =>
-        _connectedAt is { } at && candidate.FirstSeen >= at - BornBeforeConnect && candidate.FirstSeen <= at + BornAfterConnect;
+        _connectedAt is { } at && candidate.FirstSeen >= at - BornBeforeConnect && candidate.FirstSeen <= at + BornAfterConnect &&
+        candidate.FirstSeen >= _listeningSince + AlreadyAroundFor;
 
     private static int Rank(string rule) => rule switch
     {

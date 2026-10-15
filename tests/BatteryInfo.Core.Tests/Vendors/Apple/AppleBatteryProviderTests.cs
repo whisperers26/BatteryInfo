@@ -109,6 +109,27 @@ public class AppleBatteryProviderTests
     }
 
     [Fact]
+    public async Task Addresses_in_range_when_the_scan_restarts_are_not_taken_as_new_at_the_connect()
+    {
+        using var provider = CreateProvider();
+        await provider.PollAsync(CancellationToken.None);
+        Wait(10 * 60);
+        _bluetooth.FailListening("RadioNotAvailable");
+        Wait(61);
+        await provider.PollAsync(CancellationToken.None);
+        Assert.True(_bluetooth.IsListening);
+        _bluetooth.Advertise(Stranger, -40, StrangerFrame);
+        Wait(5);
+
+        _bluetooth.Connected.Add(Address);
+        await provider.PollAsync(CancellationToken.None);
+        _bluetooth.Advertise(Stranger, -40, StrangerFrame);
+        _bluetooth.Advertise(Stranger, -40, StrangerFrame);
+
+        Assert.Empty((await PollOne(provider)).Components);
+    }
+
+    [Fact]
     public async Task Connected_without_a_broadcast_yet_shows_no_level_and_says_it_waits()
     {
         _bluetooth.Connected.Add(Address);

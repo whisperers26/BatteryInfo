@@ -152,6 +152,7 @@ public sealed class AppleBatteryProvider : IBatteryProvider
         {
             _bluetooth.StartListening();
             _listenError = null;
+            foreach (var slot in _slots.Values) slot.Tracker?.ListeningStarted();
             Log.Info("Apple: listening for AirPods and Beats battery broadcasts (passive Bluetooth LE scan)");
         }
         catch (Exception e)
