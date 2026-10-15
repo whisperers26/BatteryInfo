@@ -20,9 +20,11 @@ internal static class TrayIconRenderer
     {
         if (level is null) return BatteryGlyph;
         var tenths = (int)Math.Round(Math.Clamp(level.Percent, 0, 100) / 10.0, MidpointRounding.AwayFromZero);
-        var glyph = tenths == 10
-            ? (level.Charging ? 0xE83E : 0xE83F)
-            : (level.Charging ? 0xE85A : 0xE850) + tenths;
+        // Battery0-9 are E850-E859 and Battery10 is E83F. BatteryCharging0-8 are E85A-E862, but BatteryCharging9 and 10
+        // are E83E and EA93: E863 after them is BatterySaver0, an empty battery.
+        var glyph = level.Charging
+            ? tenths switch { 10 => 0xEA93, 9 => 0xE83E, _ => 0xE85A + tenths }
+            : tenths == 10 ? 0xE83F : 0xE850 + tenths;
         return ((char)glyph).ToString();
     }
 

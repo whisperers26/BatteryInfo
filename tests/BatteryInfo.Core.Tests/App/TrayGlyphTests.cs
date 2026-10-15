@@ -11,7 +11,11 @@ public class TrayGlyphTests
     [InlineData(64, false, 0xE856)] // Battery6
     [InlineData(4, false, 0xE850)] // Battery0
     [InlineData(0, false, 0xE850)]
-    [InlineData(100, true, 0xE83E)] // BatteryCharging10
+    [InlineData(90, false, 0xE859)] // Battery9
+    [InlineData(100, true, 0xEA93)] // BatteryCharging10
+    [InlineData(94, true, 0xE83E)] // BatteryCharging9: not E863, which is BatterySaver0 (an empty battery)
+    [InlineData(85, true, 0xE83E)]
+    [InlineData(84, true, 0xE862)] // BatteryCharging8
     [InlineData(51, true, 0xE85F)] // BatteryCharging5
     [InlineData(0, true, 0xE85A)] // BatteryCharging0
     public void A_level_picks_the_battery_glyph_filled_to_the_nearest_tenth(int percent, bool charging, int glyph)
