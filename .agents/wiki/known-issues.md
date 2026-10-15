@@ -55,11 +55,15 @@ owner's hardware. Back to [AGENTS.md](../../AGENTS.md). Remove an entry once it 
   other FreeBuds models may use another RFCOMM channel.
 - Razer: which user-mode HID collection, if any, carries the dongle's battery-change notifications.
 - AirPods 4: AndroPods reports that firmware 8B39 sends no Proximity Pairing frames at all. The owner's pair
-  does (firmware unknown); a pair that sends none stays at "Waiting for its Bluetooth battery broadcast".
+  does (firmware unknown). A pair that sends none stays at "Waiting for its Bluetooth battery broadcast", unless
+  a pair of the same model is in range at -80 dBm or better: its levels are then shown.
 - AirPods: whether the broadcast levels keep updating over hours with a non-Apple host. The owner's pair went from
   90 to 80 while worn for 9 minutes; the MagicPods author says status stops updating on Windows.
-- AirPods: a same-model pair nearby can be followed instead of the owner's when it appeared at the connect or has
-  the same levels; nothing short of Apple's identity key (AAP only) can rule that out. The `07 0F 00` frame and
+- AirPods: a same-model pair nearby can be followed instead of the owner's when it appeared at the connect, has
+  the same levels, or (with neither) is the strongest at -80 dBm or better, which is the only rule when the app
+  starts with the AirPods already connected. Nothing short of Apple's identity key (AAP only) can rule that out.
+  Addresses heard when the scan starts never count as new at the connect, but after 10 minutes without a frame
+  of that model (for example after sleep) every address in range is new again. The `07 0F 00` frame and
   the `07 19 07` frame from the identity address at connect may carry a usable link; their layouts are unknown.
 - AirPods: whether Windows ever gets a level over hands-free (`AT+IPHONEACCEV`). It had none for the owner's
   connected AirPods 4; if it ever does, it is shown while no broadcast is fresh.
