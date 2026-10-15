@@ -304,7 +304,7 @@ public class AppleBroadcastTrackerTests
 
         Assert.Equal(OurOtherPod, tracker.Snapshot().Address);
         Assert.Equal(AppleBroadcastTracker.ContinuityRule, tracker.Snapshot().Rule);
-        Assert.Equal(Pods(80, null), tracker.Snapshot().Components);
+        Assert.Equal(Pods(80, null, 60), tracker.Snapshot().Components); // the case is ours, remembered; not the stranger's 40
     }
 
     [Fact]
@@ -338,7 +338,7 @@ public class AppleBroadcastTrackerTests
     }
 
     [Fact]
-    public void A_fresh_frame_without_the_case_keeps_the_case_only_for_its_own_ten_minutes()
+    public void After_ten_minutes_without_the_case_its_level_is_shown_as_remembered()
     {
         var tracker = Tracker();
         tracker.Connected(_time.GetUtcNow());
@@ -350,7 +350,84 @@ public class AppleBroadcastTrackerTests
             tracker.Offer(Ours, -70, Frame(8, 9));
         }
 
-        Assert.Equal(Pods(80, 90), tracker.Snapshot().Components);
+        Assert.Equal(Pods(80, 90, 60), tracker.Snapshot().Components);
+        Assert.NotNull(tracker.Snapshot().CaseReadAt);
+    }
+
+    [Fact]
+    public void The_case_level_from_the_last_time_a_pod_was_in_it_is_kept_across_a_reconnect()
+    {
+        var tracker = Tracker();
+        tracker.Connected(_time.GetUtcNow());
+        Twice(tracker, Ours, -50, Frame(9, 9, @case: 6, leftCharging: true, caseCharging: true)); // in the case
+        var readAt = _time.GetUtcNow();
+        tracker.Disconnected(); // lid closed
+        Wait(2 * 60 * 60);
+
+        tracker.Connected(_time.GetUtcNow()); // taken out and worn: the pods never report the case
+        Twice(tracker, Ours, -70, Frame(9, 9));
+
+        var snapshot = tracker.Snapshot();
+        Assert.Equal(Pods(90, 90, 60), snapshot.Components); // a remembered case is no longer reported as charging
+        Assert.Equal(readAt, snapshot.CaseReadAt);
+    }
+
+    [Fact]
+    public void A_remembered_case_level_is_dropped_after_six_hours()
+    {
+        var tracker = Tracker();
+        tracker.Connected(_time.GetUtcNow());
+        Twice(tracker, Ours, -50, Frame(9, 9, @case: 6));
+        Wait(6 * 60 * 60 + 1);
+        tracker.Connected(_time.GetUtcNow());
+
+        Twice(tracker, Ours, -70, Frame(9, 9));
+
+        Assert.Equal(Pods(90, 90), tracker.Snapshot().Components);
+        Assert.Null(tracker.Snapshot().CaseReadAt);
+    }
+
+    [Fact]
+    public void A_fresh_case_level_has_no_read_time()
+    {
+        var tracker = Tracker();
+        tracker.Connected(_time.GetUtcNow());
+
+        Twice(tracker, Ours, -50, Frame(9, 9, @case: 6));
+
+        Assert.Null(tracker.Snapshot().CaseReadAt);
+    }
+
+    [Fact]
+    public void A_remembered_case_alone_shows_nothing()
+    {
+        var tracker = Tracker();
+        tracker.Connected(_time.GetUtcNow());
+        Twice(tracker, Ours, -50, Frame(9, 9, @case: 6));
+        tracker.Disconnected();
+
+        tracker.Connected(_time.GetUtcNow());
+
+        Assert.Empty(tracker.Snapshot().Components);
+    }
+
+    [Fact]
+    public void A_case_level_from_a_pick_on_signal_alone_is_never_remembered()
+    {
+        var tracker = Tracker();
+        tracker.Connected(null);
+        Twice(tracker, Stranger, -50, Frame(3, 3, @case: 4));
+        Wait(6);
+        tracker.Offer(Stranger, -50, Frame(3, 3, @case: 4));
+        Assert.Equal(Stranger, tracker.Snapshot().Address);
+        tracker.Disconnected();
+        Wait(5 * 60);
+
+        tracker.Connected(_time.GetUtcNow());
+        Twice(tracker, Ours, -70, Frame(9, 9));
+
+        Assert.Equal(Ours, tracker.Snapshot().Address);
+        Assert.Equal(Pods(90, 90), tracker.Snapshot().Components);
     }
 
     [Fact]
