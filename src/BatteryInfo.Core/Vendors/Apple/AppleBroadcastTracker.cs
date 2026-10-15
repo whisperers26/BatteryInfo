@@ -28,6 +28,10 @@ public sealed class AppleBroadcastTracker(AppleModel model, TimeProvider time)
     public const string BornAtConnectRule = "new at connect";
     public const string StrongestRule = "strongest";
 
+    /// <summary>Picked on signal like <see cref="StrongestRule"/>, but every address of the model heard lately agrees on
+    /// the levels: one pair in range, so it is trusted like an address new at the connect.</summary>
+    public const string OnlyPairRule = "only pair in range";
+
     /// <summary>The RSSI Windows reports when it measured none.</summary>
     public const short NoSignal = -127;
 
@@ -64,6 +68,9 @@ public sealed class AppleBroadcastTracker(AppleModel model, TimeProvider time)
     /// <summary>How long every address in range gets to be heard before the strongest rule picks one, after the
     /// followed address went silent.</summary>
     internal static readonly TimeSpan SettleAfterLoss = TimeSpan.FromSeconds(10);
+
+    /// <summary>How far back another address of the model counts against <see cref="OnlyPairRule"/>.</summary>
+    internal static readonly TimeSpan OnlyPairLookback = TimeSpan.FromMinutes(2);
 
     internal static readonly TimeSpan PodFreshFor = TimeSpan.FromMinutes(3);
 
@@ -222,7 +229,7 @@ public sealed class AppleBroadcastTracker(AppleModel model, TimeProvider time)
             if (now - candidate.LastSeen > AliveFor || candidate.Hits.Count(t => t >= now - AliveFor) < MinHits) continue;
             var rule = Continues(candidate.LastStatus) ? ContinuityRule
                 : IsBornAtConnect(candidate) ? BornAtConnectRule
-                : allowStrongest && candidate.Rssi >= StrongestFloor ? StrongestRule
+                : allowStrongest && candidate.Rssi >= StrongestFloor ? (IsOnlyPair(address, candidate, now) ? OnlyPairRule : StrongestRule)
                 : null;
             if (rule is null) continue;
 
@@ -246,15 +253,24 @@ public sealed class AppleBroadcastTracker(AppleModel model, TimeProvider time)
         Log.Info($"{model.Name}: following {Format(pick.Address)} ({pick.Rule}, {rssi})");
     }
 
-    // The levels a new address must continue: within one 10 % step on every level both report, at least one of them.
-    private bool Continues(ProximityStatus status)
+    private bool Continues(ProximityStatus status) => _reference is not null && Agree(_reference, status);
+
+    // No other address of the model heard lately reports other levels: the pods of one pair agree with each other.
+    private bool IsOnlyPair(ulong address, Candidate candidate, DateTimeOffset now)
     {
-        if (_reference is null) return false;
+        var levels = model.Components(candidate.LastStatus);
+        return _candidates.All(other => other.Key == address || now - other.Value.LastSeen > OnlyPairLookback ||
+                                        Agree(levels, other.Value.LastStatus));
+    }
+
+    // Within one 10 % step on every level both report, and at least one of them.
+    private bool Agree(IReadOnlyList<BatteryComponent> reference, ProximityStatus status)
+    {
         var compared = 0;
         foreach (var component in model.Components(status))
         {
             if (component.Percent is not { } percent) continue;
-            if (_reference.FirstOrDefault(r => r.Name == component.Name)?.Percent is not { } shown) continue;
+            if (reference.FirstOrDefault(r => r.Name == component.Name)?.Percent is not { } shown) continue;
             if (Math.Abs(percent - shown) > MatchTolerance) return false;
             compared++;
         }
