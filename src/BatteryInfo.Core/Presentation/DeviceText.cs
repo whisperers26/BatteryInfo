@@ -76,7 +76,10 @@ public static class DeviceText
             var approximate = IsFromWindows(reading) ? "Approx. from Windows"
                 : IsFromAppleBroadcast(reading) ? "In 10 % steps"
                 : "Estimated";
-            return charge.Length == 0 ? approximate : approximate + Separator + charge;
+            var line = charge.Length == 0 ? approximate : approximate + Separator + charge;
+
+            // An AirPods note says how old a remembered case level is; other approximate notes stay in the tooltip.
+            return IsFromAppleBroadcast(reading) && reading.Detail is { Length: > 0 } note ? line + Separator + note : line;
         }
         if (reading.Detail is { Length: > 0 } detail) return detail;
         return charge.Length == 0 ? "Connected" : charge;
