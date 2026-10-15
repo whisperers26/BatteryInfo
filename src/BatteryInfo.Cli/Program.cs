@@ -53,7 +53,7 @@ internal static class Program
 
         var vendor = Option(options, "--vendor");
         var readings = new List<DeviceReading>();
-        foreach (var provider in ProviderFactory.CreateAll())
+        foreach (var provider in ProviderFactory.CreateAll(oneShot: true))
         {
             using (provider)
             {

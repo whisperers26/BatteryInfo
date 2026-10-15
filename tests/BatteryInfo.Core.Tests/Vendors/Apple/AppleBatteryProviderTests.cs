@@ -418,6 +418,25 @@ public class AppleBatteryProviderTests
     }
 
     [Fact]
+    public void By_default_the_first_poll_does_not_wait()
+    {
+        _bluetooth.Connected.Add(Address);
+        using var provider = new AppleBatteryProvider(_bluetooth, _time);
+
+        Assert.True(provider.PollAsync(CancellationToken.None).IsCompleted);
+    }
+
+    [Fact]
+    public void The_first_poll_does_not_wait_for_a_scan_that_could_not_start()
+    {
+        _bluetooth.Connected.Add(Address);
+        _bluetooth.StartError = new InvalidOperationException("The radio is off");
+        using var provider = CreateProvider(firstFrameWait: TimeSpan.FromSeconds(10));
+
+        Assert.True(provider.PollAsync(CancellationToken.None).IsCompleted);
+    }
+
+    [Fact]
     public async Task Dispose_stops_the_scan_and_releases_the_bluetooth_side()
     {
         var provider = CreateProvider();

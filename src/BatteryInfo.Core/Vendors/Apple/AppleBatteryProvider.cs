@@ -15,9 +15,10 @@ public sealed class AppleBatteryProvider : IBatteryProvider
 {
     public const string VendorName = "Apple";
 
-    /// <summary>How long the first poll waits for a connected device's first broadcast, so a one-shot read (the CLI)
-    /// gets a value. Later polls never wait: the provider asks for a refresh when a value arrives.</summary>
-    internal static readonly TimeSpan DefaultFirstFrameWait = TimeSpan.FromSeconds(10);
+    /// <summary>How long the first poll of a one-shot read (the CLI) waits for a connected device's first broadcast.
+    /// The app never waits: the provider asks for a refresh when a value arrives, and the app's first snapshot of every
+    /// vendor waits for this poll.</summary>
+    internal static readonly TimeSpan OneShotFirstFrameWait = TimeSpan.FromSeconds(10);
 
     /// <summary>How long after a failed scan the next start waits, so a scan Windows keeps stopping (the radio is off)
     /// is not restarted, and every vendor polled, in a loop.</summary>
@@ -44,11 +45,13 @@ public sealed class AppleBatteryProvider : IBatteryProvider
     {
     }
 
+    /// <param name="firstFrameWait">How long the first poll waits for a connected device's first broadcast; none by
+    /// default.</param>
     public AppleBatteryProvider(IAppleBluetooth bluetooth, TimeProvider? time = null, TimeSpan? firstFrameWait = null)
     {
         _bluetooth = bluetooth;
         _time = time ?? TimeProvider.System;
-        _firstFrameWait = firstFrameWait ?? DefaultFirstFrameWait;
+        _firstFrameWait = firstFrameWait ?? TimeSpan.Zero;
         _bluetooth.AdvertisementReceived += OnAdvertisement;
         _bluetooth.ListeningFailed += OnListeningFailed;
         _bluetooth.ConnectionChanged += OnConnectionChanged;
@@ -68,7 +71,7 @@ public sealed class AppleBatteryProvider : IBatteryProvider
         {
             ObjectDisposedException.ThrowIf(_disposed, this);
             Update();
-            if (!_polled && _firstFrameWait > TimeSpan.Zero && _slots.Values.Any(IsWaiting))
+            if (!_polled && _firstFrameWait > TimeSpan.Zero && _bluetooth.IsListening && _slots.Values.Any(IsWaiting))
             {
                 _firstValue = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
                 firstValue = _firstValue.Task;
