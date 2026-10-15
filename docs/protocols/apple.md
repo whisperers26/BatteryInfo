@@ -1,7 +1,8 @@
 # Apple AirPods and Beats: battery from the Proximity Pairing broadcast
 
-Status: taken from primary sources on 2026-10-15, not yet seen on the owner's hardware (there is no Apple
-device here). Sources:
+Status: taken from primary sources on 2026-10-15, not yet seen on the owner's hardware. The owner's AirPods 4
+(ANC) are paired with this PC but were not connected, so only their Windows records were read (section 2).
+Sources:
 - Apple's own code and logs: iOS 26.1 Sharing.framework `SFBLEScanner.mm` and AudioAccessoryServices,
   decompiled (EthanArbuckle/iPhone18-3_26.1_23B85_Restore @ `90aa0cfe`), and iOS 26.5 unified logs that
   print a received frame next to Apple's decode of it (mennovanveenendaal.github.io @ `b11a8f65`, parts 2,
@@ -45,7 +46,9 @@ So nothing is ever sent to the AirPods, and there is no command allow-list.
   BTHENUM\{0000110B-0000-1000-8000-00805F9B34FB}_VID&0001004C_PID&2024\7&3549F023&2&282D7FB83C8B_C00000000
   ```
 
-  The `BTHENUM\DEV_<addr>` node carries no VID/PID; the service nodes do.
+  The `BTHENUM\DEV_<addr>` node carries no VID/PID; the service nodes do. On this PC the owner's AirPods 4 (ANC)
+  have five of them, all `_VID&0001004C_PID&201B` on address `9CA9C520AFB8`: GATT, "AAP Server",
+  Service Discovery, "AirPods Hands-Free AG" and "UARPS" (firmware update). The app uses none of them.
 - This PID equals the model id in the broadcast (section 4). That was seen on Windows for 0x2014, 0x201B,
   0x201F, 0x2024 and 0x2027 (AirPodsDesktop issues #46, #93 and #140, Orbit, earshot), and Apple's bluetoothd
   logs `PID 0x200E ... VID 0x004C, VS 1` next to the advertised bytes `0e 20`.
@@ -261,7 +264,7 @@ broadcast value is fresh.
 
 ## 12. Live check
 
-Not possible on the owner's PC. With AirPods connected:
+Not done yet: the owner's AirPods 4 (ANC) were never connected during development. With AirPods connected:
 
 ```text
 batteryinfo apple-scan 30                    # every Apple 07 frame in range, decoded, with address and RSSI
