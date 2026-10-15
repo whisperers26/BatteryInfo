@@ -1,5 +1,6 @@
 using BatteryInfo.Core.Diagnostics;
 using BatteryInfo.Core.Monitoring;
+using BatteryInfo.Core.Vendors.Apple;
 using BatteryInfo.Core.Vendors.Betop;
 using BatteryInfo.Core.Vendors.Huawei;
 using BatteryInfo.Core.Vendors.Logitech;
@@ -20,6 +21,7 @@ public static class ProviderFactory
         () => new BetopBatteryProvider(),
         () => new RazerBatteryProvider(),
         () => new SteelSeriesBatteryProvider(),
+        () => new AppleBatteryProvider(),
     ];
 
     public static IReadOnlyList<IBatteryProvider> CreateAll() => Create(Factories);
