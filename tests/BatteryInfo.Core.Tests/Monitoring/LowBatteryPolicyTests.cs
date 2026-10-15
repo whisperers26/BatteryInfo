@@ -41,6 +41,35 @@ public class LowBatteryPolicyTests
         Assert.Empty(_policy.Evaluate([State(19)]));
     }
 
+    // AirPods read from Apple's broadcast: levels in 10 % steps, marked approximate.
+    private static DeviceState AirPods(int left, int right)
+    {
+        var reading = new DeviceReading("apple:1", "Apple", "AirPods 4", DeviceKind.Earbuds, DeviceStatus.Online,
+            [new("Left", left, ChargeState.Unknown), new("Right", right, ChargeState.Unknown), new("Case", null, ChargeState.Unknown)],
+            DateTimeOffset.UnixEpoch, DeviceReading.AppleBroadcastSource, Approximate: true);
+        return new DeviceState(reading, reading);
+    }
+
+    [Fact]
+    public void A_step_valued_level_bouncing_one_step_does_not_alert_again()
+    {
+        Assert.Equal(2, _policy.Evaluate([AirPods(20, 20)]).Count);
+
+        Assert.Empty(_policy.Evaluate([AirPods(30, 30)]));
+        Assert.Empty(_policy.Evaluate([AirPods(20, 20)]));
+        Assert.Empty(_policy.Evaluate([AirPods(30, 30)]));
+        Assert.Empty(_policy.Evaluate([AirPods(20, 20)]));
+    }
+
+    [Fact]
+    public void A_step_valued_level_rearms_two_steps_up()
+    {
+        _policy.Evaluate([AirPods(20, 20)]);
+        Assert.Empty(_policy.Evaluate([AirPods(40, 40)]));
+
+        Assert.Equal(2, _policy.Evaluate([AirPods(20, 20)]).Count);
+    }
+
     [Fact]
     public void Does_not_fire_above_threshold()
     {
