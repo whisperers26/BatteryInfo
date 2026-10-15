@@ -2,6 +2,7 @@ using System.ComponentModel;
 using System.Windows;
 using System.Windows.Input;
 using System.Windows.Interop;
+using System.Windows.Media;
 using BatteryInfo.App.Interop;
 using BatteryInfo.App.ViewModels;
 
@@ -17,7 +18,7 @@ public partial class FlyoutWindow : Window
     private bool _closingForExit;
     private IntPtr _foregroundHook;
     private DeviceViewModel? _pressedRow;
-    private Point _pressedAt;
+    private Point _pressedOnScreen;
     private bool _dragging;
     private NativeMethods.WinEventProc? _foregroundChanged; // kept in a field: Windows calls it while hooked
 
@@ -100,7 +101,7 @@ public partial class FlyoutWindow : Window
         _pressedRow = e.OriginalSource is DependencyObject source && DeviceList.ContainerFromElement(source) is FrameworkElement row
             ? row.DataContext as DeviceViewModel
             : null;
-        _pressedAt = e.GetPosition(DeviceList);
+        _pressedOnScreen = PointToScreen(e.GetPosition(this));
     }
 
     // Capturing the mouse takes it from the row's toggle button, so the press no longer counts as a click.
@@ -110,7 +111,9 @@ public partial class FlyoutWindow : Window
         var at = e.GetPosition(DeviceList);
         if (!_dragging)
         {
-            if (Math.Abs(at.Y - _pressedAt.Y) < SystemParameters.MinimumVerticalDragDistance) return;
+            // Measured on screen: the list itself moves when the scroll viewer brings the pressed row into view.
+            var moved = Math.Abs(PointToScreen(e.GetPosition(this)).Y - _pressedOnScreen.Y) / VisualTreeHelper.GetDpi(this).DpiScaleY;
+            if (moved < SystemParameters.MinimumVerticalDragDistance) return;
             _dragging = true;
             DeviceList.CaptureMouse();
             Mouse.OverrideCursor = Cursors.SizeNS;
