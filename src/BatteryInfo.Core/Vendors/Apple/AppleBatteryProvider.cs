@@ -209,14 +209,15 @@ public sealed class AppleBatteryProvider : IBatteryProvider
 
         var snapshot = tracker.Snapshot();
         var windows = WindowsBattery(slot);
-        if (snapshot.Components.Count > 0)
+        var silentFor = snapshot.LastHeard is { } heard ? _time.GetUtcNow() - heard : (TimeSpan?)null;
+
+        // Only while the pods are heard: a case level is kept longer, but alone it does not make silent pods live.
+        if (snapshot.Components.Count > 0 && silentFor <= AppleBroadcastTracker.PodFreshFor)
         {
             return Reading(slot, DeviceStatus.Online, snapshot.Components, approximate: true) with { Source = DeviceReading.AppleBroadcastSource };
         }
 
-        var silence = snapshot.LastHeard is { } heard
-            ? $"No battery broadcast for {(int)(_time.GetUtcNow() - heard).TotalMinutes} min"
-            : null;
+        var silence = silentFor > AppleBroadcastTracker.PodFreshFor ? $"No battery broadcast for {(int)silentFor.Value.TotalMinutes} min" : null;
         if (windows is { } percent)
         {
             return Reading(slot, DeviceStatus.Online, [BatteryComponent.Single(percent, ChargeState.Unknown)],

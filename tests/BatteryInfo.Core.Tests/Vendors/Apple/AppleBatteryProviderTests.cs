@@ -181,6 +181,21 @@ public class AppleBatteryProviderTests
     }
 
     [Fact]
+    public async Task A_held_case_level_does_not_keep_silent_pods_shown_as_live()
+    {
+        const string inTheCase = "07 19 01 14 20 55 99 F6 51 00 04 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00"; // case 60
+        using var provider = await ConnectedProvider(inTheCase);
+        Wait(4 * 60);
+
+        var silent = await PollOne(provider);
+        Assert.Empty(silent.Components);
+        Assert.Equal("No battery broadcast for 4 min", silent.Detail);
+
+        _bluetooth.WindowsBattery[Address] = 70;
+        Assert.Equal(DeviceReading.WindowsHfpSource, (await PollOne(provider)).Source);
+    }
+
+    [Fact]
     public async Task New_levels_are_taken_in_as_they_are_broadcast()
     {
         using var provider = await ConnectedProvider();
