@@ -54,7 +54,8 @@ public sealed class DeviceViewModel : ObservableObject
         private set => SetProperty(ref _tooltip, value);
     }
 
-    /// <summary>The values shown are not live (asleep, not connected, no access).</summary>
+    /// <summary>The values shown are not live (asleep, not connected, no access, or an older reading's values while
+    /// the latest one has none).</summary>
     public bool IsDimmed
     {
         get => _isDimmed;
@@ -109,7 +110,7 @@ public sealed class DeviceViewModel : ObservableObject
         Name = latest.Name;
         KindGlyph = GlyphFor(latest.Kind);
         StatusText = DeviceText.StatusLine(state, now);
-        IsDimmed = latest.Status != DeviceStatus.Online;
+        IsDimmed = latest.Status != DeviceStatus.Online || state.IsStale;
         var shownReading = latest.HasBattery ? latest : state.LastWithBattery;
         var approximate = shownReading?.Approximate ?? false;
         Tooltip = BuildTooltip(state, shownReading, now);
