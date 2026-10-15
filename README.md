@@ -72,10 +72,10 @@ of that build first. A local build does not update itself.
   - **Case:** AirPods report the case only while a pod is in it; an open, empty case reports nothing. So while you
     wear them, the case shows the level from the last time a pod was in it, for up to 6 hours, and the row says
     "Case read at 14:05". After that, or if it was never read, it shows "–".
-  - **Telling yours apart:** AirPods change their broadcast address every few minutes, so the app follows the one that
-    appeared when they connected, or whose levels match the last ones shown, and otherwise the strongest one nearby
-    (always so when the app starts with them already connected). A nearby pair of the same model can still be taken
-    for yours.
+  - **Telling yours apart:** AirPods change their broadcast address every few minutes and whenever a pod goes into
+    the case or comes out. The app follows the address that appeared when they connected, or whose levels match the
+    last ones shown, and otherwise the strongest one nearby (always so when the app starts with them already
+    connected). A nearby pair of the same model can still be taken for yours.
   - **No broadcast:** the row says "Waiting for its Bluetooth battery broadcast", or for how long none has come, and
     keeps the last levels, dimmed; if Windows has its own value for them, that is shown instead. One report says
     some AirPods 4 firmware sends none to non-Apple devices.
