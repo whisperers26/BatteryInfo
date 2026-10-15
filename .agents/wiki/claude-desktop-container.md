@@ -10,9 +10,13 @@ bash, dotnet, the tray app, Setup.exe) runs in that app's job, and its writes ar
 
 | Written to | Really lands in | Seen by Windows (Explorer, sign-in, Settings > Apps) |
 |---|---|---|
-| `%LOCALAPPDATA%\...` | `%LOCALAPPDATA%\Packages\Claude_pzs8sxrjxfjjc\LocalCache\Local\...` | no |
-| HKCU registry | the package's private hive | no |
-| Desktop, Start menu `Programs`, `%TEMP%`, `D:\` | where it says | yes |
+| a new folder in `%LOCALAPPDATA%` or `%APPDATA%` (`BatteryInfoApp`, `BatteryInfo`) | `%LOCALAPPDATA%\Packages\Claude_pzs8sxrjxfjjc\LocalCache\Local\...` | no |
+| a folder in them that already existed for real (`Programs`, `Microsoft\Windows\Start Menu`) | where it says | yes |
+| HKCU registry, even an existing key such as `Run` | the package's private hive | no |
+| Desktop, `%TEMP%`, `D:\` | where it says | yes |
+
+Inside the sandbox a private folder hides a real one of the same name, so once a real install exists,
+a stale sandboxed copy still shadows it for anything started from the agent shell.
 
 Inside the sandbox everything looks normal. That is how the owner's first install ended up only inside
 it, updates included: its files and its Run and uninstall entries were sandboxed, but its shortcuts were

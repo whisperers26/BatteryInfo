@@ -35,7 +35,7 @@ dotnet test BatteryInfo.slnx
 dotnet run --project src/BatteryInfo.Cli -- list --trace      # read every device once, frames on stderr
 dotnet run --project src/BatteryInfo.Cli -- hid               # HID collections on this PC
 dotnet run --project src/BatteryInfo.App -- --demo           # tray app with sample devices (own data folder)
-powershell -File scripts/publish.ps1 -Start                   # local build to %LOCALAPPDATA%\Programs\BatteryInfo (sandboxed if run from Claude)
+powershell -File scripts/publish.ps1 -Start                   # local build to %LOCALAPPDATA%\Programs\BatteryInfo (Claude: see the sandbox page)
 git tag v1.2.3 && git push origin v1.2.3                     # release: Setup.exe + update feed (on main only)
 ```
 
