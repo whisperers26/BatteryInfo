@@ -42,6 +42,9 @@ internal static class DemoHistory
         Add(DemoDevices.FreeClip, "Right", now, 75, false, 4.2, 60, 30, 8, 22);
         Add(DemoDevices.FreeClip, "Case", now, 100, false, 0.8, 25, 50, 0, 24);
         Add(DemoDevices.FreeBuds, "", now, 80, false, 7, 50, 30, 10, 22, roundTo: 10);
+        Add(DemoDevices.AirPods, "Left", now, 80, false, 6, 60, 30, 9, 21, roundTo: 10);
+        Add(DemoDevices.AirPods, "Right", now, 70, false, 6.5, 60, 30, 9, 21, roundTo: 10);
+        Add(DemoDevices.AirPods, "Case", now, 60, false, 1, 25, 40, 0, 24, roundTo: 10);
         Add(DemoDevices.Controller, "", now - TimeSpan.FromMinutes(14), 82, false, 6, 30, 20, 17, 24);
         Add(DemoDevices.Cetra, "Left", lastNight, 64, false, 8, 50, 20, 9, 21);
         Add(DemoDevices.Cetra, "Right", lastNight, 66, false, 8, 50, 20, 9, 21);
