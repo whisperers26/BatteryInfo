@@ -52,9 +52,9 @@ of that build first. A local build does not update itself.
 - Drag a row up or down to reorder the devices. The order is remembered, including for devices that are
   disconnected: one that comes back takes its old place.
 - A level marked ≈ is approximate. "Estimated" means the device reports only a voltage or a coarse level.
-  "Approx. from Windows" means the HUAWEI earbuds' own battery channel could not be read (for example another
-  app holds it), so Windows' value is shown, which can be about 5 points high; their 7-day chart shows only
-  the left, right and case values, so it has a gap for that time.
+  "Approx. from Windows" means the earbuds' own value could not be read (the HUAWEI battery channel is held by
+  another app, or no AirPods broadcast is fresh), so Windows' value is shown, which can be about 5 points high;
+  their 7-day chart shows only the left, right and case values, so it has a gap for that time.
 - The gear button next to refresh opens the settings; they fold away again whenever the flyout closes. They set
   the low-battery alert level (10-30 %) and turn the alerts on or off. An alert fires once per discharge, when a
   device that is not charging reaches the level. **Show first device's level in tray** fills the tray battery to
@@ -69,13 +69,15 @@ of that build first. A local build does not update itself.
   the tray menu checks now, and **Restart to update** installs a downloaded version right away.
 - AirPods and Beats show what they broadcast to nearby Apple devices, so their levels come in 10 % steps: "≈80 %"
   means 80-89 %, and the row says "In 10 % steps". The app only listens, with Bluetooth on, and sends them nothing.
-  - **Case:** the case only reports while a pod is in it or its lid is open, so its level is kept for 10 minutes and
-    then shows "–".
+  - **Case:** the case only reports while a pod is in it or its lid is open. While the pods keep broadcasting, its
+    level is kept for 10 minutes and then shows "–".
   - **Telling yours apart:** AirPods change their broadcast address every few minutes, so the app follows the one that
-    appeared when they connected, or whose levels match the last ones shown. A nearby pair of the same model can
-    still be taken for yours.
-  - **No broadcast:** the row says "Waiting for its Bluetooth battery broadcast", or for how long none has come. One
-    report says some AirPods 4 firmware sends none to non-Apple devices.
+    appeared when they connected, or whose levels match the last ones shown, and otherwise the strongest one nearby
+    (always so when the app starts with them already connected). A nearby pair of the same model can still be taken
+    for yours.
+  - **No broadcast:** the row says "Waiting for its Bluetooth battery broadcast", or for how long none has come, and
+    keeps the last levels, dimmed; if Windows has its own value for them, that is shown instead. One report says
+    some AirPods 4 firmware sends none to non-Apple devices.
 - `BatteryInfo.exe --demo` shows sample devices in every state; `--theme=light|dark` overrides the Windows theme.
 - In the demo, Start with Windows only flips the switch: it is not saved and does not change what starts at sign-in.
 
