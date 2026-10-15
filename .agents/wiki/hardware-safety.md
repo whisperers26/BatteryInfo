@@ -13,7 +13,7 @@ What may be sent to the owner's devices, and how to check a provider against the
 | Betop KP70C2 | 2.4 GHz dongle | 20BC:518D pad on; 20DD:518D pad asleep | yes |
 | Razer Basilisk V3 Pro 35K | HyperSpeed dongle / cable | 1532:00D7 / 1532:00D6 | no (dongle usually unplugged) |
 | SteelSeries Arctis Nova 5X | 2.4 GHz base station | 1038:2253 MI_03 (UP FFC0) | yes |
-| AirPods 4 (ANC), "David's AirPods - Find My" | classic Bluetooth; battery from its BLE broadcast | 9C:A9:C5:20:AF:B8, PID 0x201B | no (paired, never connected during development) |
+| AirPods 4 (ANC), "David's AirPods - Find My" | classic Bluetooth; battery from its BLE broadcast | 9C:A9:C5:20:AF:B8, PID 0x201B | yes (broadcast received in the case and worn) |
 
 ## Allowed commands
 
