@@ -68,4 +68,13 @@ public class DeviceOrderTests
     {
         Assert.Equal(["b", "a"], DeviceOrder.Merge([], ["b", "a"]));
     }
+
+    [Fact]
+    public void Merge_drops_repeated_saved_ids()
+    {
+        // A hand-edited settings file can repeat an id, or repeat it in another case.
+        var order = DeviceOrder.Merge(["a", "b", "A", "c"], ["b", "a"]);
+
+        Assert.Equal(["b", "a", "c"], order);
+    }
 }
