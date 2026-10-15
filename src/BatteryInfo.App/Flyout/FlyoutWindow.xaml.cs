@@ -36,9 +36,10 @@ public partial class FlyoutWindow : Window
         {
             if (IsVisible) FlyoutPositioner.Position(this);
         };
-        DeviceList.PreviewMouseLeftButtonDown += OnRowPressed;
+        // Every press and release passes through the window, so one outside the rows clears a pending row press.
+        PreviewMouseLeftButtonDown += OnPressed;
+        PreviewMouseLeftButtonUp += OnReleased;
         DeviceList.PreviewMouseMove += OnRowDragged;
-        DeviceList.PreviewMouseLeftButtonUp += OnRowReleased;
         // LostMouseCapture bubbles: taking the capture from the row's toggle button raises it here too. Only the list's
         // own loss ends the drag.
         DeviceList.LostMouseCapture += (_, e) =>
@@ -68,6 +69,8 @@ public partial class FlyoutWindow : Window
     public void HideFlyout()
     {
         StopWatchingForeground();
+        if (_dragging) DeviceList.ReleaseMouseCapture();
+        _pressedRow = null;
         if (!IsVisible) return;
         Hide();
         _hiddenAt = Environment.TickCount64;
@@ -90,8 +93,9 @@ public partial class FlyoutWindow : Window
         _foregroundHook = IntPtr.Zero;
     }
 
-    // A press on a row may become a drag once the mouse moves far enough; until then it is an ordinary click.
-    private void OnRowPressed(object sender, MouseButtonEventArgs e)
+    // A press on a row may become a drag once the mouse moves far enough; until then it is an ordinary click. A press
+    // anywhere else clears the row.
+    private void OnPressed(object sender, MouseButtonEventArgs e)
     {
         _pressedRow = e.OriginalSource is DependencyObject source && DeviceList.ContainerFromElement(source) is FrameworkElement row
             ? row.DataContext as DeviceViewModel
@@ -115,9 +119,13 @@ public partial class FlyoutWindow : Window
         ViewModel.MoveDevice(row, DropIndex(row, at.Y));
     }
 
-    private void OnRowReleased(object sender, MouseButtonEventArgs e)
+    private void OnReleased(object sender, MouseButtonEventArgs e)
     {
-        if (!_dragging) return;
+        if (!_dragging)
+        {
+            _pressedRow = null;
+            return;
+        }
         e.Handled = true;
         DeviceList.ReleaseMouseCapture();
     }
