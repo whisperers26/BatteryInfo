@@ -81,11 +81,13 @@ internal static class Program
         return 0;
     }
 
-    private static string FormatComponents(DeviceReading reading)
+    private static string FormatComponents(DeviceReading reading) => FormatComponents(reading.Components, reading.Approximate);
+
+    private static string FormatComponents(IReadOnlyList<BatteryComponent> components, bool approximate)
     {
-        if (reading.Components.Count == 0) return "-";
-        var approx = reading.Approximate ? "~" : "";
-        return string.Join(" | ", reading.Components.Select(c =>
+        if (components.Count == 0) return "-";
+        var approx = approximate ? "~" : "";
+        return string.Join(" | ", components.Select(c =>
         {
             var name = c.Name.Length == 0 ? "" : $"{c.Name} ";
             var percent = c.Percent is { } p ? $"{approx}{p}%" : "?";
