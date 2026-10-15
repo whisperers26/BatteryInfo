@@ -21,6 +21,9 @@ public sealed record DeviceReading(
     /// device: coarse, and often a few points high.</summary>
     public const string WindowsHfpSource = "HFP (approx.)";
 
+    /// <summary>The <see cref="Source"/> of a value from Apple's Proximity Pairing broadcast: 10 % steps, rounded down.</summary>
+    public const string AppleBroadcastSource = "BLE broadcast";
+
     public bool HasBattery => Components.Any(c => c.Percent is not null);
 
     public int? LowestPercent => Components.Where(c => c.Percent is not null).Min(c => c.Percent);

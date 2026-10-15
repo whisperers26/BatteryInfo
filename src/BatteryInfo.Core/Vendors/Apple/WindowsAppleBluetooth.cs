@@ -14,7 +14,7 @@ public sealed class WindowsAppleBluetooth : IAppleBluetooth
     /// <summary>Vendor id source 1 (Bluetooth SIG), vendor 0x004C (Apple), then the 4 hex digits of the PID.</summary>
     private const string AppleDeviceId = "_VID&0001004C_PID&";
 
-    private readonly BluetoothConnectionWatcher _watcher = new("Apple");
+    private readonly BluetoothConnectionWatcher _watcher = new(AppleBatteryProvider.VendorName);
     private readonly PassiveAdvertisementListener _listener = new(AppleProximityProtocol.AppleCompanyId);
 
     public event EventHandler<BleAdvertisement>? AdvertisementReceived
