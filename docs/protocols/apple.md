@@ -213,16 +213,23 @@ The broadcast cannot be tied to the paired AirPods with certainty:
 The tracker (`AppleBroadcastTracker`, one per paired device) uses these rules:
 
 1. Only status frames whose model id equals the paired device's PID count. The scan runs while any Apple audio
-   device is paired, so the addresses already around before the AirPods connect are known.
-2. Once an address is chosen it is kept while it is heard, whatever its signal strength. If it is silent for
-   30 s, the tracker chooses again.
+   device is paired, so the addresses already around before the AirPods connect are known. Addresses first heard
+   in the first 10 s after the scan (re)starts count as already around.
+2. Once an address is chosen by continuity or at the connect, it is kept while it is heard, whatever its signal
+   strength. One chosen as the strongest gives way, with its levels dropped, as soon as an address matching
+   continuity or the connect has 2 frames. A chosen address silent for 30 s is dropped and the tracker chooses
+   again.
 3. A new address needs 2 frames within the last 30 s, then the first rule that matches picks it:
-   1. **Continuity**: its pods and case match the levels the device showed last (each within one 10 % step).
-      This follows the pods through an address change, and from one pod to the other: in the ears they take
-      turns broadcasting.
+   1. **Continuity**: every level it reports, and at least one, is within one 10 % step of the last levels shown
+      by an address chosen by continuity or at the connect. This follows the pods through an address change, and
+      from one pod to the other. Levels shown from a strongest pick never become the reference, and are dropped
+      when it goes silent.
    2. **Born at connect**: it was first heard between 60 s before and 30 s after Windows reported the AirPods
       connected. New addresses appear when the pods leave the case and connect.
-   3. **Strongest**: otherwise the strongest one at -80 dBm or better (smoothed: 0.7 × old + 0.3 × new).
+   3. **Strongest**: otherwise the strongest one at -80 dBm or better (smoothed: 0.7 × old + 0.3 × new). It
+      waits until every address in range had time to be heard: 5 s when the connect moment is unknown (the app
+      started with the AirPods connected, and the CLI), 30 s after a known connect, 10 s after the followed
+      address went silent.
 
    When more than one address matches the same rule, the strongest wins.
 4. On every connect the choice and the levels start afresh.
@@ -234,11 +241,15 @@ without AAP.
 
 | Situation | Reading |
 |---|---|
-| Paired, not connected | none: the device shows as not connected with its last value |
-| Connected, chosen address heard within 3 min | Online, levels in 10 % steps, approximate. A pod's level is kept 3 min and the case's 10 min after the last frame that reported it |
-| Connected, nothing heard yet, or nothing for 3 min | Online with no level and a note ("waiting for its battery broadcast" or "no battery broadcast for 5 min"); Windows' own value instead if it has one |
+| Paired, not connected | none: the device is hidden until it connects again; its last values stay in the history |
+| Connected, the followed address heard within 3 min | Online, levels in 10 % steps, approximate. A pod's level is kept 3 min and the case's 10 min after the last frame that reported it |
+| Connected, nothing heard yet, or nothing for 3 min | Online with no level and a note ("Waiting for its Bluetooth battery broadcast" or "No battery broadcast for N min"); the flyout keeps the last levels, dimmed. Windows' own value instead if it has one |
+| Connected, the scan could not start or stopped on its own, no Windows value | Error: "Bluetooth LE scan failed: <reason>", until any Apple advertisement arrives; the scan is retried a minute later |
 | Two connected devices with the same PID | Error: they cannot be told apart |
 | PID not in section 6 | Error: model not supported yet |
+
+The CLI reads once, so its first poll waits up to 10 s for the first broadcast. The app never waits: the provider
+asks for a refresh when a value arrives.
 
 ## 9. Windows' own value
 

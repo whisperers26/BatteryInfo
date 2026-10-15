@@ -18,7 +18,7 @@ public sealed record AppleBroadcastSnapshot(
 
 /// <summary>Picks, among the broadcasts of one model, the address that belongs to one paired device, and keeps its
 /// levels (docs/protocols/apple.md §7-8). Without the identity key nothing proves ownership, so the choice rests on
-/// when an address first appeared, whether its levels continue the ones shown, and signal strength, in that order.
+/// whether an address's levels continue the ones shown, when it first appeared, and signal strength, in that order.
 /// Not thread-safe: the provider serializes calls.</summary>
 public sealed class AppleBroadcastTracker(AppleModel model, TimeProvider time)
 {
@@ -29,7 +29,8 @@ public sealed class AppleBroadcastTracker(AppleModel model, TimeProvider time)
     /// <summary>The RSSI Windows reports when it measured none.</summary>
     public const short NoSignal = -127;
 
-    /// <summary>The weakest smoothed signal the strongest rule accepts. A followed address is kept whatever its signal.</summary>
+    /// <summary>The weakest smoothed signal the strongest rule accepts. A followed address is kept whatever its signal
+    /// (one chosen as the strongest still gives way to better evidence).</summary>
     internal const short StrongestFloor = -80;
 
     /// <summary>Frames an address needs within <see cref="AliveFor"/> before it can be chosen.</summary>
@@ -55,9 +56,11 @@ public sealed class AppleBroadcastTracker(AppleModel model, TimeProvider time)
     internal static readonly TimeSpan AlreadyAroundFor = TimeSpan.FromSeconds(10);
 
     /// <summary>How long every address in range gets to be heard before the strongest rule picks one, when the connect
-    /// moment is unknown, or after the followed address went silent.</summary>
+    /// moment is unknown.</summary>
     internal static readonly TimeSpan SettleUnknownConnect = TimeSpan.FromSeconds(5);
 
+    /// <summary>How long every address in range gets to be heard before the strongest rule picks one, after the
+    /// followed address went silent.</summary>
     internal static readonly TimeSpan SettleAfterLoss = TimeSpan.FromSeconds(10);
 
     internal static readonly TimeSpan PodFreshFor = TimeSpan.FromMinutes(3);
