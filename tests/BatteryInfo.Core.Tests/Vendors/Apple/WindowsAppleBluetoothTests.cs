@@ -20,6 +20,20 @@ public class WindowsAppleBluetoothTests
         Assert.Equal((ushort)0x2024, WindowsAppleBluetooth.AppleModelId(AirPodsPro2Usbc, Address));
 
     [Fact]
+    public void Reads_the_owners_airpods_4_anc_as_windows_lists_them()
+    {
+        // This PC on 2026-10-15, "David's AirPods - Find My" (paired, not connected): Get-PnpDevice.
+        string[] ids =
+        [
+            @"BTHENUM\{00001801-0000-1000-8000-00805F9B34FB}_VID&0001004C_PID&201B\8&5DD1202&0&9CA9C520AFB8_C00000000",
+            @"BTHENUM\{74EC2172-0BAD-4D01-8F77-997B2BE0722A}_VID&0001004C_PID&201B\8&5DD1202&0&9CA9C520AFB8_C00000000",
+            @"BTHENUM\{0000111E-0000-1000-8000-00805F9B34FB}_VID&0001004C_PID&201B\8&5DD1202&0&9CA9C520AFB8_C00000000",
+        ];
+
+        Assert.Equal((ushort)0x201B, WindowsAppleBluetooth.AppleModelId(ids, 0x9CA9C520AFB8));
+    }
+
+    [Fact]
     public void Matches_ids_in_any_case() =>
         Assert.Equal((ushort)0x2014, WindowsAppleBluetooth.AppleModelId(
             [@"bthenum\{0000110b-0000-1000-8000-00805f9b34fb}_vid&0001004c_pid&2014\7&1&282d7fb83c8b_c00000000"], Address));
