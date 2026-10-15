@@ -214,7 +214,10 @@ public sealed class AppleBatteryProvider : IBatteryProvider
         // Only while the pods are heard: a case level is kept longer, but alone it does not make silent pods live.
         if (snapshot.Components.Count > 0 && silentFor <= AppleBroadcastTracker.PodFreshFor)
         {
-            return Reading(slot, DeviceStatus.Online, snapshot.Components, approximate: true) with { Source = DeviceReading.AppleBroadcastSource };
+            var caseNote = snapshot.CaseReadAt is { } read
+                ? $"Case read at {TimeZoneInfo.ConvertTime(read, _time.LocalTimeZone).ToString("HH:mm", CultureInfo.InvariantCulture)}"
+                : null;
+            return Reading(slot, DeviceStatus.Online, snapshot.Components, caseNote, approximate: true);
         }
 
         var silence = silentFor > AppleBroadcastTracker.PodFreshFor ? $"No battery broadcast for {(int)silentFor.Value.TotalMinutes} min" : null;
