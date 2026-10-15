@@ -140,9 +140,12 @@ The app shows n × 10 %, the lower bound, marked approximate, so a low-battery a
 
 ### 5.3 Case and charging
 
-- Case level is the low nibble of `Data[7]`, the same for both pods, and case charging is `0x40`. The case
-  usually reports F while both pods are out of it, because it only speaks while a pod is inside or the lid is
-  open.
+- Case level is the low nibble of `Data[7]`, the same for both pods, and case charging is `0x40`. The case has no
+  broadcast of its own: a pod reports it only while that pod is inside. With both pods out it reads F, even with
+  the lid open (seen live on the owner's AirPods 4: one pod in the case was enough, an open empty case was not).
+  The app keeps the last case level read from a pod in the case for 6 hours, across reconnects, and says when it
+  was read; a closed case's level only changes while it charges. A level from a pick on signal alone is never
+  kept that way.
 - A set charging bit means charging. A clear bit only means "not reported as charging": the frame does not
   separate a worn pod from one that is full in the case. So a clear bit maps to `Unknown`, never to
   "discharging".
@@ -242,7 +245,7 @@ without AAP.
 | Situation | Reading |
 |---|---|
 | Paired, not connected | none: the device is hidden until it connects again; its last values stay in the history |
-| Connected, the followed address heard within 3 min | Online, levels in 10 % steps, approximate. A pod's level is kept 3 min and the case's 10 min after the last frame that reported it |
+| Connected, the followed address heard within 3 min | Online, levels in 10 % steps, approximate. A pod's level is kept 3 min and the case's 10 min after the last frame that reported it; after that the case shows the level remembered from the last time a pod was in it (up to 6 h), with "Case read at hh:mm" |
 | Connected, nothing heard yet, or nothing for 3 min | Online with no level and a note ("Waiting for its Bluetooth battery broadcast" or "No battery broadcast for N min"); the flyout keeps the last levels, dimmed. Windows' own value instead if it has one |
 | Connected, the scan could not start or stopped on its own, no Windows value | Error: "Bluetooth LE scan failed: <reason>", until any Apple advertisement arrives; the scan is retried a minute later |
 | Two connected devices with the same PID | Error: they cannot be told apart |
