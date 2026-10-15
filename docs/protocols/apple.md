@@ -1,8 +1,7 @@
 # Apple AirPods and Beats: battery from the Proximity Pairing broadcast
 
-Status: taken from primary sources on 2026-10-15, not yet seen on the owner's hardware. The owner's AirPods 4
-(ANC) are paired with this PC but were not connected, so only their Windows records were read (section 2).
-Sources:
+Status: taken from primary sources, then checked live on 2026-10-15 with the owner's AirPods 4 (ANC) on this PC:
+in the case on its charger, taken out, and worn with music playing (section 12). Sources:
 - Apple's own code and logs: iOS 26.1 Sharing.framework `SFBLEScanner.mm` and AudioAccessoryServices,
   decompiled (EthanArbuckle/iPhone18-3_26.1_23B85_Restore @ `90aa0cfe`), and iOS 26.5 unified logs that
   print a received frame next to Apple's decode of it (mennovanveenendaal.github.io @ `b11a8f65`, parts 2,
@@ -26,7 +25,8 @@ called Proximity Pairing. The app only listens for it:
 
 - A WinRT `BluetoothLEAdvertisementWatcher` with `ScanningMode = Passive`, set explicitly and checked before
   every `Start()` (`PassiveAdvertisementListener`). A passive scan never transmits. An active scan would send a
-  scan request to each scannable advertiser: AirPods Max frames arrive as `ScannableUndirected`.
+  scan request to each scannable advertiser: AirPods frames arrive as `ScannableUndirected` (seen live from the
+  owner's AirPods 4, and from an AirPods Max USB-C in Orbit's captures).
 - No connection of any kind: no GATT, no `BluetoothLEDevice`, no RFCOMM, and no Apple Accessory Protocol
   (AAP, L2CAP PSM 0x1001). AAP gives exact values but needs a handshake and writes, and Windows has no
   user-mode L2CAP API for classic Bluetooth anyway.
@@ -202,8 +202,9 @@ table is shown with "model not supported yet" instead of a guessed layout.
 ## 7. Which broadcast is ours
 
 The broadcast cannot be tied to the paired AirPods with certainty:
-- Each pod advertises from its own random resolvable address, which changes about every 15 minutes and again
-  whenever the pods leave the case or reconnect. Windows does not resolve it to the paired address.
+- Each pod advertises from its own random resolvable address, which changes about every 15 minutes and often
+  when the pods leave the case or reconnect (the owner's left pod kept its address when taken out). Windows does
+  not resolve it to the paired address.
 - Proving ownership needs the identity key, which only AAP can read.
 - Strangers' AirPods of the same model are often received more strongly than the owner's own pods: -42 to
   -68 dBm against -74 to -100 dBm in two AirPodsDesktop traces. So neither a hard signal floor nor "the
@@ -243,7 +244,8 @@ without AAP.
 
 Windows' Bluetooth audio gateway (`BTAGService.dll` on this PC) handles Apple's hands-free battery extension
 (`AT+XAPL`, `AT+IPHONEACCEV`, reply `+XAPL=iPhone`). No capture shows AirPods sending it to Windows, and AndroPods
-reports that Android, which also answers `+XAPL=iPhone`, never gets a level from AirPods 2. The app reads the battery property
+reports that Android, which also answers `+XAPL=iPhone`, never gets a level from AirPods 2. On this PC Windows held
+no value for the owner's connected AirPods 4 (ANC), in the case or worn. The app reads the battery property
 anyway, read-only (`BluetoothBatteryProperty`), and shows it, marked "approx. from Windows", only while no
 broadcast value is fresh.
 
@@ -256,15 +258,14 @@ broadcast value is fresh.
 
 ## 11. Open questions
 
-- Whether the levels keep updating during a long session with a non-Apple host. Frames kept coming while
-  worn and playing music on Windows (MagicPods-Windows #246, AirPods Pro 2), but the MagicPods author says
-  status stops updating there.
-- AndroPods reports that AirPods 4 on firmware 8B39 send no `07` frames at all.
+- Whether the levels keep updating over hours with a non-Apple host. The owner's AirPods 4 kept broadcasting
+  while worn with music, and their levels dropped from 90 to 80 within 9 minutes (section 12), but the MagicPods
+  author says status stops updating on Windows.
+- AndroPods reports that AirPods 4 on firmware 8B39 send no `07` frames at all. The owner's AirPods 4 (ANC) do;
+  their firmware version is not known here.
 - Whether Windows ever gets an AirPods level over hands-free (section 9).
 
 ## 12. Live check
-
-Not done yet: the owner's AirPods 4 (ANC) were never connected during development. With AirPods connected:
 
 ```text
 batteryinfo apple-scan 30                    # every Apple 07 frame in range, decoded, with address and RSSI
@@ -272,3 +273,22 @@ batteryinfo list --vendor Apple --trace      # the provider's choice and reading
 ```
 
 The trace prints bytes 0-10 of each frame; the encrypted tail is left out.
+
+2026-10-15, the owner's AirPods 4 (ANC), connected to this PC: 488 frames in 10 minutes, all
+`ScannableUndirected`, replayed in `tests/.../Apple/Fixtures/airpods4-anc-live.txt`:
+
+```text
+5341481C2754  -37 dBm  07 19 01 1B 20 35 99 F0 53 00 04   left pod in the case:  L 90 + R 90 +, case 0 +
+4D00295F4A98  -40 dBm  07 19 01 1B 20 55 99 F0 52 00 04   right pod in the case: the same, swapped
+5341481C2754  -39 dBm  07 19 01 1B 20 35 99 F1 53 00 04   43 s later: case 10 +
+5341481C2754  -53 dBm  07 19 01 1B 20 23 99 8F 13 00 04   pods taken out: case not reported
+5341481C2754  -65 dBm  07 19 01 1B 20 2B 88 8F 13 00 05   worn, music playing (byte 10 = 05): L 80, R 80
+```
+
+- In the case both pods broadcast, from two addresses, with this and other swapped. Out of the case only the
+  left pod's address was heard, and it was the same address as in the case.
+- Worn, frames came a median 0.4 s and at most 7.6 s apart, at -50 to -85 dBm. One frame arrived with no
+  signal value (-127).
+- `batteryinfo list --vendor Apple` found the pair connected, waited for the 5 s settle, followed the stronger
+  pod and printed `Left ~90% charging | Right ~90% charging | Case ~0% charging` from the broadcast. Windows' own
+  battery value was empty.

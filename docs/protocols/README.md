@@ -11,7 +11,7 @@ reference for one vendor provider in `src/BatteryInfo.Core/Vendors/`.
 | Betop / Beitong | [betop.md](betop.md) | yes (KP70C2, 91 %) |
 | Razer | [razer.md](razer.md) | no (dongle unplugged) |
 | SteelSeries Arctis Nova 5 / 5X | [steelseries.md](steelseries.md) | yes (Nova 5X, 45 %) |
-| Apple AirPods / Beats (BLE broadcast) | [apple.md](apple.md) | no (no Apple device; 4 reference decoders agree) |
+| Apple AirPods / Beats (BLE broadcast) | [apple.md](apple.md) | yes (AirPods 4 ANC, L 90 / R 90 / case 0 %, then worn 80 / 80) |
 
 Every provider sends only the read/query commands these files allow-list; the Apple one sends nothing at all. Several neighbouring
 commands write settings or reboot a device into firmware-update mode; never add one.
