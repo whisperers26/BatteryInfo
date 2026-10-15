@@ -1,10 +1,7 @@
 using System.Net;
 using System.Net.Sockets;
-using System.Runtime.InteropServices;
 using BatteryInfo.Core.Bluetooth;
-using BatteryInfo.Core.Diagnostics;
 using BatteryInfo.Core.Interop;
-using Windows.Devices.Bluetooth;
 
 namespace BatteryInfo.Core.Vendors.Huawei;
 
@@ -22,13 +19,14 @@ public sealed unsafe class WindowsHuaweiTransport : IHuaweiTransport
     private static readonly Guid SerialPortService = new("00001101-0000-1000-8000-00805F9B34FB");
     private static readonly string[] NamePrefixes = ["HUAWEI FreeBuds", "HUAWEI FreeClip", "HUAWEI FreeLace"];
     private static readonly TimeSpan SendTimeout = TimeSpan.FromSeconds(2);
-    private static readonly TimeSpan WatchTimeout = TimeSpan.FromSeconds(3);
 
-    private readonly object _gate = new();
-    private readonly Dictionary<ulong, BluetoothDevice?> _watched = [];
-    private bool _disposed;
+    private readonly BluetoothConnectionWatcher _watcher = new("HUAWEI");
 
-    public event EventHandler? ConnectionChanged;
+    public event EventHandler? ConnectionChanged
+    {
+        add => _watcher.Changed += value;
+        remove => _watcher.Changed -= value;
+    }
 
     internal static int DeviceInfoSize => sizeof(BluetoothApis.DeviceInfo);
 
@@ -45,7 +43,7 @@ public sealed unsafe class WindowsHuaweiTransport : IHuaweiTransport
         {
             if (!IsHuaweiEarbuds(device.Name, device.ClassOfDevice, HasHuaweiVendorId(instanceIds, device.Address))) continue;
             found.Add(new HuaweiDevice(device.Address, string.IsNullOrWhiteSpace(device.Name) ? FallbackName : device.Name));
-            Watch(device.Address);
+            _watcher.Watch(device.Address);
         }
         return found;
     }
@@ -70,22 +68,7 @@ public sealed unsafe class WindowsHuaweiTransport : IHuaweiTransport
 
     public int? ReadWindowsBattery(ulong address) => BluetoothBatteryProperty.Read(address);
 
-    public void Dispose()
-    {
-        List<BluetoothDevice> devices;
-        lock (_gate)
-        {
-            if (_disposed) return;
-            _disposed = true;
-            devices = _watched.Values.OfType<BluetoothDevice>().ToList();
-            _watched.Clear();
-        }
-        foreach (var device in devices)
-        {
-            device.ConnectionStatusChanged -= OnConnectionStatusChanged;
-            device.Dispose();
-        }
-    }
+    public void Dispose() => _watcher.Dispose();
 
     /// <summary>The generic rule of §1: a FreeBuds/FreeClip/FreeLace name, or the Bluetooth SIG vendor id of HUAWEI
     /// (0x027D) on a device whose class is audio/video, so HUAWEI phones, laptops and watches never match.</summary>
@@ -127,58 +110,6 @@ public sealed unsafe class WindowsHuaweiTransport : IHuaweiTransport
         {
             throw new TimeoutException($"RFCOMM connect took longer than {timeout.TotalSeconds:0.#} s");
         }
-    }
-
-    // Subscribes once per device to WinRT connection-status changes. Creating the BluetoothDevice reads Windows'
-    // record of it; it does not connect to it.
-    private void Watch(ulong address)
-    {
-        lock (_gate)
-        {
-            if (_disposed || !_watched.TryAdd(address, null)) return;
-        }
-
-        BluetoothDevice? device = null;
-        try
-        {
-            var lookup = BluetoothDevice.FromBluetoothAddressAsync(address).AsTask();
-            if (lookup.Wait(WatchTimeout)) device = lookup.Result;
-        }
-        catch (Exception e)
-        {
-            Log.Warn($"HUAWEI: cannot watch Bluetooth connection changes of {BluetoothBatteryProperty.FormatAddress(address)} ({e.Message})");
-        }
-
-        if (device is null)
-        {
-            lock (_gate) _watched.Remove(address);
-            return;
-        }
-
-        device.ConnectionStatusChanged += OnConnectionStatusChanged;
-        lock (_gate)
-        {
-            if (!_disposed)
-            {
-                _watched[address] = device;
-                return;
-            }
-        }
-        device.ConnectionStatusChanged -= OnConnectionStatusChanged;
-        device.Dispose();
-    }
-
-    private void OnConnectionStatusChanged(BluetoothDevice sender, object args)
-    {
-        try
-        {
-            Log.Info($"{sender.Name}: Bluetooth {sender.ConnectionStatus}");
-        }
-        catch (Exception)
-        {
-            // Logging must never stop the refresh below.
-        }
-        ConnectionChanged?.Invoke(this, EventArgs.Empty);
     }
 
     /// <summary>An RFCOMM socket as a stream. Reads wait at most half a second for data (select), then throw
@@ -262,110 +193,6 @@ public sealed unsafe class WindowsHuaweiTransport : IHuaweiTransport
             }
             base.Dispose(disposing);
         }
-    }
-
-    /// <summary>Win32 Bluetooth API (bthprops.cpl). Pointers are passed directly, so nothing is marshalled.</summary>
-    private static class BluetoothApis
-    {
-        private const string Library = "bthprops.cpl";
-        private const uint ErrorSuccess = 0;
-
-        public readonly record struct Paired(ulong Address, string Name, uint ClassOfDevice, bool Connected);
-
-        // BLUETOOTH_DEVICE_INFO: 560 bytes on x64; Address at 8, fConnected at 20, szName at 64. The BOOLs are flag
-        // values (fConnected = 32), so test them for non-zero.
-        [StructLayout(LayoutKind.Sequential)]
-        public struct DeviceInfo
-        {
-            public uint Size;
-            public ulong Address;
-            public uint ClassOfDevice;
-            public int Connected;
-            public int Remembered;
-            public int Authenticated;
-            public SystemTime LastSeen;
-            public SystemTime LastUsed;
-            public fixed char Name[248];
-        }
-
-        [StructLayout(LayoutKind.Sequential)]
-        public struct SystemTime
-        {
-            public ushort Year, Month, DayOfWeek, Day, Hour, Minute, Second, Milliseconds;
-        }
-
-        // BLUETOOTH_DEVICE_SEARCH_PARAMS: 40 bytes on x64.
-        [StructLayout(LayoutKind.Sequential)]
-        public struct SearchParams
-        {
-            public uint Size;
-            public int ReturnAuthenticated;
-            public int ReturnRemembered;
-            public int ReturnUnknown;
-            public int ReturnConnected;
-            public int IssueInquiry;
-            public byte TimeoutMultiplier;
-            public IntPtr Radio;
-        }
-
-        /// <summary>Remembered (paired) devices from Windows' records. No inquiry is issued, so nothing is paged.</summary>
-        public static List<Paired> EnumeratePaired()
-        {
-            var result = new List<Paired>();
-            var search = new SearchParams
-            {
-                Size = (uint)sizeof(SearchParams),
-                ReturnAuthenticated = 1,
-                ReturnRemembered = 1,
-                ReturnUnknown = 0,
-                ReturnConnected = 1,
-                IssueInquiry = 0,
-                TimeoutMultiplier = 0,
-                Radio = IntPtr.Zero,
-            };
-            var info = new DeviceInfo { Size = (uint)sizeof(DeviceInfo) };
-            var find = BluetoothFindFirstDevice(&search, &info);
-            if (find == IntPtr.Zero) return result; // none paired, or no radio
-            try
-            {
-                do
-                {
-                    result.Add(ToPaired(&info));
-                    info = new DeviceInfo { Size = (uint)sizeof(DeviceInfo) };
-                }
-                while (BluetoothFindNextDevice(find, &info) != 0);
-            }
-            finally
-            {
-                BluetoothFindDeviceClose(find);
-            }
-            return result;
-        }
-
-        public static Paired? GetDeviceInfo(ulong address)
-        {
-            var info = new DeviceInfo { Size = (uint)sizeof(DeviceInfo), Address = address };
-            return BluetoothGetDeviceInfo(IntPtr.Zero, &info) == ErrorSuccess ? ToPaired(&info) : null;
-        }
-
-        private static Paired ToPaired(DeviceInfo* info) =>
-            new(info->Address, new string(info->Name).Trim(), info->ClassOfDevice, info->Connected != 0);
-
-        [DllImport(Library, ExactSpelling = true)]
-        [DefaultDllImportSearchPaths(DllImportSearchPath.System32)]
-        private static extern uint BluetoothGetDeviceInfo(IntPtr radio, DeviceInfo* info);
-
-        [DllImport(Library, ExactSpelling = true)]
-        [DefaultDllImportSearchPaths(DllImportSearchPath.System32)]
-        private static extern IntPtr BluetoothFindFirstDevice(SearchParams* searchParams, DeviceInfo* info);
-
-        [DllImport(Library, ExactSpelling = true)]
-        [DefaultDllImportSearchPaths(DllImportSearchPath.System32)]
-        private static extern int BluetoothFindNextDevice(IntPtr find, DeviceInfo* info);
-
-        [DllImport(Library, ExactSpelling = true)]
-        [DefaultDllImportSearchPaths(DllImportSearchPath.System32)]
-        private static extern int BluetoothFindDeviceClose(IntPtr find);
     }
 }
 

@@ -1,11 +1,12 @@
 # BatteryInfo
 
 A personal Windows 11 tray app that shows the battery level of every connected peripheral
-(Razer, Logitech, ROG, HUAWEI FreeClip 2, Betop/Beitong controllers, SteelSeries headsets) in one flyout.
+(Razer, Logitech, ROG, HUAWEI FreeClip 2, Betop/Beitong controllers, SteelSeries headsets, Apple AirPods and Beats)
+in one flyout.
 
 It talks to each device the way the vendor's own software does, so Synapse, G HUB, Armoury Crate,
-BetopGame and SteelSeries GG do not need to be running. It only ever sends read commands: see
-[docs/protocols](docs/protocols/README.md).
+BetopGame and SteelSeries GG do not need to be running. It only ever sends read commands, and to AirPods nothing
+at all: see [docs/protocols](docs/protocols/README.md).
 
 ## Supported devices
 
@@ -17,6 +18,7 @@ BetopGame and SteelSeries GG do not need to be running. It only ever sends read 
 | Betop (Beitong) | 2.4 GHz controllers with plain-byte dongles, e.g. KP70C2 (also KP20/KP40/KP50/KP70 variants, untested) | Betop vendor report `02 15` |
 | Razer | Basilisk V3 Pro 35K on its HyperSpeed dongle or cable (not yet tested on hardware) | Razer 90-byte feature report `07/80`, `07/84` |
 | SteelSeries | Arctis Nova 5X (and Nova 5, untested) through its wireless base station | SteelSeries status report `00 B0` |
+| Apple | AirPods (1st generation to AirPods 5), AirPods Pro 1-3, AirPods Max and Beats earbuds and headphones paired with the PC (tested with AirPods 4 ANC) | the battery broadcast AirPods send to nearby Apple devices, only listened to, in 10 % steps |
 
 ## Install and run
 
@@ -50,9 +52,9 @@ of that build first. A local build does not update itself.
 - Drag a row up or down to reorder the devices. The order is remembered, including for devices that are
   disconnected: one that comes back takes its old place.
 - A level marked ≈ is approximate. "Estimated" means the device reports only a voltage or a coarse level.
-  "Approx. from Windows" means the HUAWEI earbuds' own battery channel could not be read (for example another
-  app holds it), so Windows' value is shown, which can be about 5 points high; their 7-day chart shows only
-  the left, right and case values, so it has a gap for that time.
+  "Approx. from Windows" means the earbuds' own value could not be read (the HUAWEI battery channel is held by
+  another app, or no AirPods broadcast is fresh), so Windows' value is shown, which can be about 5 points high;
+  their 7-day chart shows only the left, right and case values, so it has a gap for that time.
 - The gear button next to refresh opens the settings; they fold away again whenever the flyout closes. They set
   the low-battery alert level (10-30 %) and turn the alerts on or off. An alert fires once per discharge, when a
   device that is not charging reaches the level. **Show first device's level in tray** fills the tray battery to
@@ -65,6 +67,17 @@ of that build first. A local build does not update itself.
   checks a minute after it starts and every six hours, downloads a new version in the background and installs
   it the next time it starts; a notification says when one is ready. **Check for updates** in the flyout's settings or
   the tray menu checks now, and **Restart to update** installs a downloaded version right away.
+- AirPods and Beats show what they broadcast to nearby Apple devices, so their levels come in 10 % steps: "≈80 %"
+  means 80-89 %, and the row says "In 10 % steps". The app only listens, with Bluetooth on, and sends them nothing.
+  - **Case:** the case only reports while a pod is in it or its lid is open. While the pods keep broadcasting, its
+    level is kept for 10 minutes and then shows "–".
+  - **Telling yours apart:** AirPods change their broadcast address every few minutes, so the app follows the one that
+    appeared when they connected, or whose levels match the last ones shown, and otherwise the strongest one nearby
+    (always so when the app starts with them already connected). A nearby pair of the same model can still be taken
+    for yours.
+  - **No broadcast:** the row says "Waiting for its Bluetooth battery broadcast", or for how long none has come, and
+    keeps the last levels, dimmed; if Windows has its own value for them, that is shown instead. One report says
+    some AirPods 4 firmware sends none to non-Apple devices.
 - `BatteryInfo.exe --demo` shows sample devices in every state; `--theme=light|dark` overrides the Windows theme.
 - In the demo, Start with Windows only flips the switch: it is not saved and does not change what starts at sign-in.
 
@@ -74,4 +87,5 @@ of that build first. A local build does not update itself.
 dotnet run --project src/BatteryInfo.Cli -- list              # read every device once
 dotnet run --project src/BatteryInfo.Cli -- list --json       # the same as JSON
 dotnet run --project src/BatteryInfo.Cli -- list --vendor Logitech --trace   # one vendor, with device frames
+dotnet run --project src/BatteryInfo.Cli -- apple-scan 30     # print the AirPods/Beats broadcasts in range for 30 s
 ```

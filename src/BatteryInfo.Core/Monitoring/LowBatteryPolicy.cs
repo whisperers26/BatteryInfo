@@ -8,6 +8,9 @@ public sealed record LowBatteryAlert(string DeviceId, string DeviceName, string 
 public sealed class LowBatteryPolicy
 {
     private const int RearmMargin = 5;
+
+    /// <summary>The re-arm margin of an approximate value: AirPods report 10 % steps, so one step back up is no recharge.</summary>
+    private const int ApproximateRearmMargin = 10;
     private const string WholeDevice = "";
     private const char KeySeparator = '|';
 
@@ -44,11 +47,12 @@ public sealed class LowBatteryPolicy
             if (reading.Status != DeviceStatus.Online) continue;
 
             var alerted = AlertedComponents(reading.DeviceId);
+            var rearmMargin = reading.Approximate ? ApproximateRearmMargin : RearmMargin;
             foreach (var component in reading.Components)
             {
                 if (component.Percent is not { } percent) continue;
 
-                if (IsOnPower(component.Charge) || percent > Threshold + RearmMargin)
+                if (IsOnPower(component.Charge) || percent > Threshold + rearmMargin)
                 {
                     alerted.Remove(component.Name);
                     continue;

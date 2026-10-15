@@ -284,7 +284,7 @@
                                HorizontalAlignment="Center" />
                     <TextBlock FontSize="12" TextWrapping="Wrap" TextAlignment="Center"
                                Foreground="{DynamicResource TextFillColorSecondaryBrush}"
-                               Text="Logitech, ROG, Razer, Betop and HUAWEI FreeClip devices show up here while they are connected and awake." />
+                               Text="Logitech, ROG, Razer, Betop, SteelSeries, HUAWEI FreeClip, AirPods and Beats devices show up here while they are connected and awake." />
                 </StackPanel>
             </StackPanel>
         </ScrollViewer>

@@ -82,6 +82,24 @@ public class DeviceTextTests
         Assert.Equal("Estimated from the battery voltage or level", DeviceText.ApproximateNote(fromVoltage));
     }
 
+    /// <summary>AirPods read from Apple's battery broadcast, which comes in 10 % steps.</summary>
+    private static DeviceReading AirPods(ChargeState left) =>
+        new("apple:9CA9C520AFB8", "Apple", "AirPods 4", DeviceKind.Earbuds, DeviceStatus.Online,
+            [new("Left", 80, left), new("Right", 90, ChargeState.Unknown), new("Case", null, ChargeState.Unknown)], Now,
+            DeviceReading.AppleBroadcastSource, Approximate: true);
+
+    [Fact]
+    public void Values_from_apples_broadcast_say_they_come_in_10_percent_steps()
+    {
+        Assert.Equal("In 10 % steps", DeviceText.StatusLine(Fresh(AirPods(ChargeState.Unknown)), Now));
+        Assert.Equal("In 10 % steps · Left charging", DeviceText.StatusLine(Fresh(AirPods(ChargeState.Charging)), Now));
+    }
+
+    [Fact]
+    public void Approximate_note_explains_apples_10_percent_steps() =>
+        Assert.Equal("Apple broadcasts 10 % steps, so the real level can be up to about 10 points higher",
+            DeviceText.ApproximateNote(AirPods(ChargeState.Unknown)));
+
     [Fact]
     public void Online_with_a_detail_shows_the_detail()
     {

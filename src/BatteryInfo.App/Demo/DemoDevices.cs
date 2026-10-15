@@ -17,6 +17,12 @@ internal static class DemoDevices
         Detail = "The battery channel is busy, so this is Windows' own value",
     };
 
+    public static readonly DeviceReading AirPods = Template("apple:A1B2C3D4E5F8", "Apple", "AirPods Pro 2", DeviceKind.Earbuds,
+        DeviceReading.AppleBroadcastSource) with
+    {
+        Approximate = true,
+    };
+
     public static readonly DeviceReading Controller = Template("betop:KP70C2", "Betop", "Betop KP70C2", DeviceKind.Controller, "Betop 0x15");
 
     public static readonly DeviceReading Razer = Template("razer:00D6", "Razer", "Razer Basilisk V3 Pro 35K", DeviceKind.Mouse, "Razer 07/80") with

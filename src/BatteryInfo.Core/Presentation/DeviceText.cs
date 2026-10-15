@@ -9,7 +9,8 @@ public static class DeviceText
     public const string Separator = " · ";
 
     /// <summary>The second line of a device row: "Charging", "Asleep · 82 % 14 min ago",
-    /// "Not connected · last 82 % yesterday", "Approx. from Windows", "Estimated", or the provider's detail.</summary>
+    /// "Not connected · last 82 % yesterday", "Approx. from Windows", "Estimated", "In 10 % steps", or the provider's
+    /// detail.</summary>
     /// <param name="now">The current local time.</param>
     public static string StatusLine(DeviceState state, DateTimeOffset now)
     {
@@ -28,6 +29,7 @@ public static class DeviceText
     public static string? ApproximateNote(DeviceReading reading) =>
         !reading.Approximate ? null
         : IsFromWindows(reading) ? "Windows' own value, which can be about 5 points high"
+        : IsFromAppleBroadcast(reading) ? "Apple broadcasts 10 % steps, so the real level can be up to about 10 points higher"
         : "Estimated from the battery voltage or level";
 
     /// <summary>"56 %", "≈80 %" for an approximate value, "–" when unknown.</summary>
@@ -71,7 +73,9 @@ public static class DeviceText
         if (reading.Approximate)
         {
             // Only the HFP fallback is Windows' value; a device's own voltage or coarse level is an estimate.
-            var approximate = IsFromWindows(reading) ? "Approx. from Windows" : "Estimated";
+            var approximate = IsFromWindows(reading) ? "Approx. from Windows"
+                : IsFromAppleBroadcast(reading) ? "In 10 % steps"
+                : "Estimated";
             return charge.Length == 0 ? approximate : approximate + Separator + charge;
         }
         if (reading.Detail is { Length: > 0 } detail) return detail;
@@ -79,6 +83,8 @@ public static class DeviceText
     }
 
     private static bool IsFromWindows(DeviceReading reading) => reading.Source == DeviceReading.WindowsHfpSource;
+
+    private static bool IsFromAppleBroadcast(DeviceReading reading) => reading.Source == DeviceReading.AppleBroadcastSource;
 
     private static string ChargeLine(IReadOnlyList<BatteryComponent> components)
     {

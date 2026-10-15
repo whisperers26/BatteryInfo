@@ -16,6 +16,10 @@
   </ItemGroup>
 
   <ItemGroup>
+    <None Include="Vendors\Apple\Fixtures\*.txt" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
+  <ItemGroup>
     <ProjectReference Include="..\..\src\BatteryInfo.Core\BatteryInfo.Core.csproj" />
     <ProjectReference Include="..\..\src\BatteryInfo.App\BatteryInfo.App.csproj" />
   </ItemGroup>

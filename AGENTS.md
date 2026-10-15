@@ -18,7 +18,8 @@ into firmware-update mode.
    PR that you merge yourself with a merge commit once CI passes. → git-workflow.md
 2. **Small commits, one topic each**, made as you go (the owner's global commit rules apply).
 3. **Only allow-listed reads reach a device.** Every HID write goes through `GuardedHidConnection`
-   with the vendor's `ICommandPolicy`; the HUAWEI socket checks its policy before every send.
+   with the vendor's `ICommandPolicy`; the HUAWEI socket checks its policy before every send; the Apple
+   provider sends nothing (passive BLE scan only).
    → hardware-safety.md
 4. **`dotnet build` (warnings are errors) and `dotnet test` pass before every push.**
 5. **Update the README** in the same PR when what the user sees changes.

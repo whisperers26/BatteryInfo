@@ -6,6 +6,7 @@ using BatteryInfo.Core.Bluetooth;
 using BatteryInfo.Core.Diagnostics;
 using BatteryInfo.Core.Hid;
 using BatteryInfo.Core.Model;
+using BatteryInfo.Core.Vendors.Apple;
 
 namespace BatteryInfo.Cli;
 
@@ -18,6 +19,8 @@ internal static class Program
                                 read every device's battery once (--trace prints device frames to stderr)
           hid [--vid XXXX]      list HID collections (ids, usages, report lengths, report ids, access)
           bt-battery <address>  Windows' own battery value for a Bluetooth address (12 hex digits)
+          apple-scan [seconds]  listen (passively, sending nothing) for AirPods and Beats battery broadcasts
+                                and print each one decoded; 30 s by default
         """;
 
     private static readonly TimeSpan ProviderTimeout = TimeSpan.FromSeconds(15);
@@ -34,6 +37,8 @@ internal static class Program
                 return ListHid(options);
             case "bt-battery" when options.Length == 1:
                 return BluetoothBattery(options[0]);
+            case "apple-scan" when options.Length <= 1:
+                return await AppleScan(options);
             default:
                 Console.Error.WriteLine(Usage);
                 return command is null or "-h" or "--help" ? 0 : 2;
@@ -48,7 +53,7 @@ internal static class Program
 
         var vendor = Option(options, "--vendor");
         var readings = new List<DeviceReading>();
-        foreach (var provider in ProviderFactory.CreateAll())
+        foreach (var provider in ProviderFactory.CreateAll(oneShot: true))
         {
             using (provider)
             {
@@ -81,11 +86,13 @@ internal static class Program
         return 0;
     }
 
-    private static string FormatComponents(DeviceReading reading)
+    private static string FormatComponents(DeviceReading reading) => FormatComponents(reading.Components, reading.Approximate);
+
+    private static string FormatComponents(IReadOnlyList<BatteryComponent> components, bool approximate)
     {
-        if (reading.Components.Count == 0) return "-";
-        var approx = reading.Approximate ? "~" : "";
-        return string.Join(" | ", reading.Components.Select(c =>
+        if (components.Count == 0) return "-";
+        var approx = approximate ? "~" : "";
+        return string.Join(" | ", components.Select(c =>
         {
             var name = c.Name.Length == 0 ? "" : $"{c.Name} ";
             var percent = c.Percent is { } p ? $"{approx}{p}%" : "?";
@@ -109,6 +116,57 @@ internal static class Program
         }
         Console.WriteLine($"{devices.Count} collection(s)");
         return 0;
+    }
+
+    private static async Task<int> AppleScan(string[] options)
+    {
+        var seconds = 30;
+        if (options.Length == 1 && (!int.TryParse(options[0], NumberStyles.None, CultureInfo.InvariantCulture, out seconds) || seconds < 1))
+        {
+            Console.Error.WriteLine(Usage);
+            return 2;
+        }
+
+        using var bluetooth = new WindowsAppleBluetooth();
+        var paired = bluetooth.FindPaired();
+        foreach (var device in paired)
+        {
+            var model = AppleModels.Find(device.ModelId)?.Name ?? "model not supported yet";
+            var state = bluetooth.IsConnected(device.Address) ? "connected" : "not connected";
+            Console.WriteLine($"paired: {device.Name} {BluetoothBatteryProperty.FormatAddress(device.Address)} PID 0x{device.ModelId:X4} ({model}), {state}");
+        }
+        if (paired.Count == 0) Console.WriteLine("no AirPods or Beats paired with this PC");
+
+        var frames = 0;
+        var gate = new object();
+        bluetooth.AdvertisementReceived += (_, advertisement) =>
+        {
+            if (advertisement.Data.Length == 0 || advertisement.Data[0] != AppleProximityProtocol.ProximityPairingType) return;
+            lock (gate)
+            {
+                frames++;
+                Console.WriteLine(DescribeProximityFrame(advertisement));
+            }
+        };
+        bluetooth.ListeningFailed += (_, reason) => Console.Error.WriteLine($"the scan stopped: {reason}");
+        bluetooth.StartListening();
+        Console.WriteLine($"listening for {seconds} s (passive scan: nothing is sent) ...");
+        await Task.Delay(TimeSpan.FromSeconds(seconds));
+        bluetooth.StopListening();
+        lock (gate) Console.WriteLine($"{frames} Proximity Pairing frame(s)");
+        return 0;
+    }
+
+    // Bytes 0-10 only: the rest is encrypted.
+    private static string DescribeProximityFrame(BleAdvertisement advertisement)
+    {
+        var data = advertisement.Data;
+        var plaintext = Log.Hex(data.AsSpan(0, Math.Min(data.Length, AppleProximityProtocol.PlaintextLength)));
+        var address = BluetoothBatteryProperty.FormatAddress(advertisement.Address) + (advertisement.PublicAddress ? " public" : "");
+        var head = $"{DateTime.Now:HH:mm:ss.fff} {address} {advertisement.Rssi,4} dBm {advertisement.Kind,-24} {plaintext}";
+        if (AppleProximityProtocol.Parse(data) is not { } status) return $"{head}  (not a status frame)";
+        if (AppleModels.Find(status.ModelId) is not { } model) return $"{head}  PID 0x{status.ModelId:X4} (model not supported yet)";
+        return $"{head}  {model.Name}: {FormatComponents(model.Components(status), approximate: true)}";
     }
 
     private static int BluetoothBattery(string address)
