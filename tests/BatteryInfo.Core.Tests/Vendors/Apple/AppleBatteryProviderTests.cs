@@ -196,6 +196,32 @@ public class AppleBatteryProviderTests
     }
 
     [Fact]
+    public async Task A_remembered_case_level_says_when_it_was_read()
+    {
+        const string inTheCase = "07 19 01 14 20 55 99 F6 51 00 04 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00"; // case 60
+        using var provider = CreateProvider();
+        await provider.PollAsync(CancellationToken.None);
+        Wait(60);
+        _bluetooth.Connected.Add(Address); // the lid opens: the pods connect
+        await provider.PollAsync(CancellationToken.None);
+        _bluetooth.Advertise(Pods, -50, inTheCase);
+        _bluetooth.Advertise(Pods, -50, inTheCase);
+        var readAt = TimeZoneInfo.ConvertTime(_time.GetUtcNow(), _time.LocalTimeZone);
+        _bluetooth.Connected.Remove(Address);
+        await provider.PollAsync(CancellationToken.None);
+        Wait(60 * 60);
+
+        _bluetooth.Connected.Add(Address);
+        await provider.PollAsync(CancellationToken.None);
+        _bluetooth.Advertise(Pods, -60, ProTwo);
+        _bluetooth.Advertise(Pods, -60, ProTwo);
+        var reading = await PollOne(provider);
+
+        Assert.Equal([90, 80, 60], reading.Components.Select(c => c.Percent));
+        Assert.Equal($"Case read at {readAt:HH:mm}", reading.Detail);
+    }
+
+    [Fact]
     public async Task New_levels_are_taken_in_as_they_are_broadcast()
     {
         using var provider = await ConnectedProvider();

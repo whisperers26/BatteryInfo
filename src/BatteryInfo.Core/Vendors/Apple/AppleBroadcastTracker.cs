@@ -10,11 +10,13 @@ namespace BatteryInfo.Core.Vendors.Apple;
 /// <param name="LastHeard">When the last frame of the followed address was taken in; null since the last connect.</param>
 /// <param name="Address">The random address followed now, or null.</param>
 /// <param name="Rule">Why that address was chosen, for traces.</param>
+/// <param name="CaseReadAt">When the case level shown was read, if it is a remembered one rather than a fresh one.</param>
 public sealed record AppleBroadcastSnapshot(
     IReadOnlyList<BatteryComponent> Components,
     DateTimeOffset? LastHeard,
     ulong? Address,
-    string? Rule);
+    string? Rule,
+    DateTimeOffset? CaseReadAt = null);
 
 /// <summary>Picks, among the broadcasts of one model, the address that belongs to one paired device, and keeps its
 /// levels (docs/protocols/apple.md §7-8). Without the identity key nothing proves ownership, so the choice rests on
@@ -67,6 +69,10 @@ public sealed class AppleBroadcastTracker(AppleModel model, TimeProvider time)
 
     internal static readonly TimeSpan CaseFreshFor = TimeSpan.FromMinutes(10);
 
+    /// <summary>How long the case level read the last time a pod was in the case is still shown, across reconnects.
+    /// Worn pods never report the case, and a closed case's level only changes while it charges.</summary>
+    internal static readonly TimeSpan CaseMemoryFor = TimeSpan.FromHours(6);
+
     /// <summary>A one-battery model's charging bit drops out for seconds at a time while it charges.</summary>
     internal static readonly TimeSpan ChargingHold = TimeSpan.FromSeconds(30);
 
@@ -79,6 +85,7 @@ public sealed class AppleBroadcastTracker(AppleModel model, TimeProvider time)
     private string? _rule;
     private IReadOnlyList<BatteryComponent>? _reference;
     private DateTimeOffset? _lastHeard;
+    private Held? _caseMemory;
     private DateTimeOffset _listeningSince = time.GetUtcNow();
 
     public AppleModel Model => model;
@@ -128,8 +135,16 @@ public sealed class AppleBroadcastTracker(AppleModel model, TimeProvider time)
     {
         var now = time.GetUtcNow();
         var components = model.ComponentNames.Select(name => Shown(name, now)).ToList();
+        DateTimeOffset? caseReadAt = null;
+        var caseIndex = components.FindIndex(c => c.Name == CaseName);
+        if (caseIndex >= 0 && components[caseIndex].Percent is null && components.Any(c => c.Percent is not null) &&
+            _caseMemory is { } memory && now - memory.At <= CaseMemoryFor)
+        {
+            components[caseIndex] = new BatteryComponent(CaseName, memory.Percent, ChargeState.Unknown);
+            caseReadAt = memory.At;
+        }
         if (components.All(c => c.Percent is null)) components = [];
-        return new AppleBroadcastSnapshot(components, _lastHeard, _chosen, _rule);
+        return new AppleBroadcastSnapshot(components, _lastHeard, _chosen, _rule, caseReadAt);
     }
 
     private void Forget()
@@ -266,6 +281,9 @@ public sealed class AppleBroadcastTracker(AppleModel model, TimeProvider time)
             var charging = component.Charge == ChargeState.Charging;
             var chargingAt = charging ? at : _held.GetValueOrDefault(component.Name)?.ChargingAt;
             _held[component.Name] = new Held(percent, charging, at, chargingAt);
+
+            // Remembered across reconnects, unless it may be a stranger's (a pick on signal alone).
+            if (component.Name == CaseName && _rule != StrongestRule) _caseMemory = new Held(percent, false, at, null);
         }
         _lastHeard = at;
     }

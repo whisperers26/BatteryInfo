@@ -96,6 +96,11 @@ public class DeviceTextTests
     }
 
     [Fact]
+    public void A_remembered_airpods_case_level_says_when_it_was_read() =>
+        Assert.Equal("In 10 % steps · Case read at 14:05",
+            DeviceText.StatusLine(Fresh(AirPods(ChargeState.Unknown) with { Detail = "Case read at 14:05" }), Now));
+
+    [Fact]
     public void Approximate_note_explains_apples_10_percent_steps() =>
         Assert.Equal("Apple broadcasts 10 % steps, so the real level can be up to about 10 points higher",
             DeviceText.ApproximateNote(AirPods(ChargeState.Unknown)));
