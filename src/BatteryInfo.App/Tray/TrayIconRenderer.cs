@@ -8,7 +8,8 @@ using BatteryInfo.Core.Presentation;
 
 namespace BatteryInfo.App.Tray;
 
-/// <summary>Draws a Segoe Fluent Icons glyph into a tray icon, white for a dark taskbar and black for a light one.</summary>
+/// <summary>Draws a Segoe Fluent Icons glyph into a tray icon, white for a dark taskbar and black for a light one, or
+/// red for a low battery.</summary>
 internal static class TrayIconRenderer
 {
     /// <summary>Battery (full) in Segoe Fluent Icons / Segoe MDL2 Assets.</summary>
@@ -30,6 +31,10 @@ internal static class TrayIconRenderer
 
     private static readonly FontFamily IconFont = new("Segoe Fluent Icons, Segoe MDL2 Assets");
 
+    // Windows' critical red on a light taskbar; a lighter red on a dark one, where that would be too dark to read.
+    private static readonly Color LowOnLight = Color.FromRgb(0xC4, 0x2B, 0x1C);
+    private static readonly Color LowOnDark = Color.FromRgb(0xFF, 0x5A, 0x4E);
+
     /// <summary>The small-icon size the notification area uses now (16 px at 100 %): at the current DPI of the
     /// taskbar's monitor. The system DPI would not do: it is fixed for the life of the process, so it misses a
     /// change of the display scale.</summary>
@@ -46,9 +51,10 @@ internal static class TrayIconRenderer
         return size > 0 ? size : 16;
     }
 
-    public static System.Drawing.Icon Render(string glyph, bool lightTaskbar, int size)
+    public static System.Drawing.Icon Render(string glyph, bool lightTaskbar, bool low, int size)
     {
-        var pixels = RenderPixels(glyph, lightTaskbar ? Colors.Black : Colors.White, size);
+        var color = low ? (lightTaskbar ? LowOnLight : LowOnDark) : lightTaskbar ? Colors.Black : Colors.White;
+        var pixels = RenderPixels(glyph, color, size);
         using var bitmap = new System.Drawing.Bitmap(size, size, System.Drawing.Imaging.PixelFormat.Format32bppPArgb);
         var data = bitmap.LockBits(new System.Drawing.Rectangle(0, 0, size, size),
             System.Drawing.Imaging.ImageLockMode.WriteOnly, System.Drawing.Imaging.PixelFormat.Format32bppPArgb);

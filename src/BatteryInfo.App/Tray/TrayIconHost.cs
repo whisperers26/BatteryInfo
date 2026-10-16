@@ -19,6 +19,8 @@ internal sealed class TrayIconHost : IDisposable
     private int _imageSize;
     private string _glyph = TrayIconRenderer.BatteryGlyph;
     private string? _imageGlyph;
+    private bool _low;
+    private bool _imageLow;
 
     public TrayIconHost(System.Windows.Threading.Dispatcher dispatcher)
     {
@@ -69,10 +71,11 @@ internal sealed class TrayIconHost : IDisposable
     /// <summary>Asked each time the menu opens, so the check mark follows the registry.</summary>
     public Func<bool>? IsStartWithWindows { get; set; }
 
-    /// <summary>Draws the battery filled to this level; null draws it full.</summary>
-    public void SetLevel(TrayLevel? level)
+    /// <summary>Draws the battery filled to this level, red when low; null draws it full.</summary>
+    public void SetLevel(TrayLevel? level, bool low)
     {
         _glyph = TrayIconRenderer.GlyphFor(level);
+        _low = level is not null && low;
         UpdateIcon();
     }
 
@@ -118,12 +121,13 @@ internal sealed class TrayIconHost : IDisposable
     {
         var light = TaskbarTheme.IsLight();
         var size = TrayIconRenderer.TraySize();
-        if (_image is not null && _lightTaskbar == light && _imageSize == size && _imageGlyph == _glyph) return;
+        if (_image is not null && _lightTaskbar == light && _imageSize == size && _imageGlyph == _glyph && _imageLow == _low) return;
         _lightTaskbar = light;
         _imageSize = size;
         _imageGlyph = _glyph;
+        _imageLow = _low;
         var previous = _image;
-        _image = TrayIconRenderer.Render(_glyph, light, size);
+        _image = TrayIconRenderer.Render(_glyph, light, _low, size);
         _icon.Icon = _image;
         previous?.Dispose();
     }
