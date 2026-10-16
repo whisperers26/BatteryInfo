@@ -57,7 +57,8 @@ of that build first. A local build does not update itself.
   their 7-day chart shows only the left, right and case values, so it has a gap for that time.
 - The gear button next to refresh opens the settings; they fold away again whenever the flyout closes. They set
   the low-battery alert level (10-30 %) and turn the alerts on or off. An alert fires once per discharge, when a
-  device that is not charging reaches the level. **Show first device's level in tray** fills the tray battery to
+  device that is not charging reaches the level, as a Windows notification that stays in Notification Center
+  (Win+N) until you dismiss it, so a banner hidden by Do Not Disturb is not lost. **Show first device's level in tray** fills the tray battery to
   the level of the first device in the list that has a live value (with a bolt while it charges); off (the
   default), the tray battery is always full. For earbuds that is the lower earbud: the case counts only when
   neither earbud has a value, though it still raises its own low-battery alert.
