@@ -17,6 +17,7 @@ using BatteryInfo.Core.Presentation;
 using BatteryInfo.Core.Settings;
 using BatteryInfo.Core.Updates;
 using Microsoft.Win32;
+using Velopack.Locators;
 
 namespace BatteryInfo.App;
 
@@ -125,7 +126,8 @@ public partial class App : Application, IFlyoutServices
         // The demo keeps no alerts across runs: its mouse is always low, and a kept alert would hide the toast the
         // demo is meant to show.
         var alertStore = _options.Demo ? null : new LowBatteryAlertStore(Path.Combine(root, "low-battery-alerts.json"));
-        _notifier = new LowBatteryNotifier(_tray.ShowWarning, alertStore)
+        var toasts = new ToastSender(ToastAppId(), _tray.ShowWarning);
+        _notifier = new LowBatteryNotifier(toasts.Show, alertStore)
         {
             Threshold = _settings.LowBatteryThreshold,
             Enabled = _settings.NotificationsEnabled,
@@ -157,6 +159,11 @@ public partial class App : Application, IFlyoutServices
 
     // Updates come from this repository's GitHub releases. A local build (not installed through Setup.exe) reports
     // updates as unavailable.
+    /// <summary>The app id Setup.exe put on the Start menu shortcut ("velopack." and the package id), which toasts
+    /// must be sent under; null for a copy that was not installed, such as a dotnet run.</summary>
+    private static string? ToastAppId() =>
+        VelopackLocator.IsCurrentSet && VelopackLocator.Current.AppId is { Length: > 0 } appId ? "velopack." + appId : null;
+
     private void StartUpdater()
     {
         var updater = new Updater(new VelopackUpdateBackend(), _time) { Automatic = _settings.AutoUpdate };
