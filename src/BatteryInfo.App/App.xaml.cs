@@ -257,11 +257,12 @@ public partial class App : Application, IFlyoutServices
         _notifier?.Process(snapshot);
     }
 
-    // The tooltip lists the shown devices in order, and the icon may show the first one's level.
+    // The tooltip lists the shown devices in order, and the icon may show the first one's level, red at the alert level.
     private void UpdateTray()
     {
         _tray?.SetTooltip(TrayTooltip.Build(_shown));
-        _tray?.SetLevel(_settings.TrayShowsLevel ? TrayLevel.First(_shown) : null);
+        var level = _settings.TrayShowsLevel ? TrayLevel.First(_shown) : null;
+        _tray?.SetLevel(level, level?.IsLow(_settings.LowBatteryThreshold) == true);
     }
 
     private void ToggleFlyout()
@@ -316,6 +317,7 @@ public partial class App : Application, IFlyoutServices
     {
         if (_notifier is not null) _notifier.Threshold = percent;
         UpdateSettings(_settings with { LowBatteryThreshold = percent });
+        UpdateTray();
     }
 
     void IFlyoutServices.SetAutoUpdate(bool enabled)
