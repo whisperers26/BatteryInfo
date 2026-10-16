@@ -39,6 +39,9 @@ owner's hardware. Back to [AGENTS.md](../../AGENTS.md). Remove an entry once it 
   elevated copy.
 - **Sandbox warning**: the final-path check was run by hand on a sandboxed install (it resolves into the
   Claude package's LocalCache) and is unit-tested; the toast itself has not been seen yet.
+- **Low-battery toasts**: sent under the Start menu shortcut's app id (`velopack.BatteryInfoApp`), falling back
+  to a tray balloon (which Windows deletes from Notification Center once its banner closes) without one. A
+  hand-sent toast under that id stayed in Notification Center; one raised by the app itself has not been seen yet.
 - **Updating with publish.ps1**: the running tray app closing on its exit event and removing its icon.
   The event is unit-tested and the script was run against a stand-in process, not the real tray app.
 
