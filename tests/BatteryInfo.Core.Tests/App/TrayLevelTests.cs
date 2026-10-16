@@ -75,4 +75,14 @@ public class TrayLevelTests
     {
         Assert.Null(TrayLevel.First([]));
     }
+
+    [Theory]
+    [InlineData(20, false, 20, true)]
+    [InlineData(19, false, 20, true)]
+    [InlineData(21, false, 20, false)]
+    [InlineData(5, true, 20, false)]
+    public void Low_at_or_below_the_alert_level_unless_charging(int percent, bool charging, int threshold, bool low)
+    {
+        Assert.Equal(low, new TrayLevel(percent, charging).IsLow(threshold));
+    }
 }
